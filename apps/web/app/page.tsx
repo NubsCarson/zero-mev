@@ -33,9 +33,12 @@ export default function Home() {
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
   const [programStats, setProgramStats] = useState<ProgramStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
-  const fetchPrograms = async () => {
-    setLoading(true);
+  const fetchPrograms = async (isAutoUpdate = false) => {
+    if (!isAutoUpdate) setLoading(true);
     try {
       const params = new URLSearchParams({
         validator,
@@ -50,6 +53,7 @@ export default function Home() {
       
       if (response.ok && Array.isArray(data)) {
         setPrograms(data);
+        setLastUpdate(new Date());
       } else {
         console.error('API error:', data);
         setPrograms([]);
@@ -58,12 +62,12 @@ export default function Home() {
       console.error('Error fetching programs:', error);
       setPrograms([]);
     } finally {
-      setLoading(false);
+      if (!isAutoUpdate) setLoading(false);
     }
   };
 
-  const fetchProgramStats = async (programId: string) => {
-    setStatsLoading(true);
+  const fetchProgramStats = async (programId: string, isAutoUpdate = false) => {
+    if (!isAutoUpdate) setStatsLoading(true);
     try {
       const params = new URLSearchParams({
         programId,
@@ -86,19 +90,107 @@ export default function Home() {
       console.error('Error fetching program stats:', error);
       setProgramStats([]);
     } finally {
-      setStatsLoading(false);
+      if (!isAutoUpdate) setStatsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchPrograms();
+    setLastUpdate(new Date());
   }, []);
+
+  useEffect(() => {
+    if (!isLiveMode) return;
+
+    let programsEventSource: EventSource;
+    let statsEventSource: EventSource;
+    
+    const connectProgramsStream = () => {
+      setConnectionStatus('connecting');
+      const params = new URLSearchParams({
+        validator,
+        from: `${from}T00:00:00Z`,
+        to: `${to}T23:59:59Z`,
+        excludeBlacklisted: excludeBlacklisted.toString(),
+      });
+      
+      programsEventSource = new EventSource(`/api/stream/programs?${params}`);
+      
+      programsEventSource.onopen = () => {
+        setConnectionStatus('connected');
+      };
+      
+      programsEventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data)) {
+            setPrograms(data);
+            setLastUpdate(new Date());
+          }
+        } catch (error) {
+          console.error('Error parsing programs SSE data:', error);
+        }
+      };
+      
+      programsEventSource.onerror = () => {
+        setConnectionStatus('disconnected');
+        programsEventSource.close();
+        setTimeout(connectProgramsStream, 2000);
+      };
+    };
+    
+    const connectStatsStream = () => {
+      if (!selectedProgram) return;
+      
+      const params = new URLSearchParams({
+        programId: selectedProgram,
+        validator,
+        from: `${from}T00:00:00Z`,
+        to: `${to}T23:59:59Z`,
+      });
+      
+      statsEventSource = new EventSource(`/api/stream/program-stats?${params}`);
+      
+      statsEventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data)) {
+            setProgramStats(data);
+          }
+        } catch (error) {
+          console.error('Error parsing stats SSE data:', error);
+        }
+      };
+      
+      statsEventSource.onerror = () => {
+        statsEventSource.close();
+        setTimeout(connectStatsStream, 2000);
+      };
+    };
+    
+    connectProgramsStream();
+    if (selectedProgram) {
+      connectStatsStream();
+    }
+    
+    return () => {
+      if (programsEventSource) programsEventSource.close();
+      if (statsEventSource) statsEventSource.close();
+    };
+  }, [isLiveMode, selectedProgram, validator, from, to, excludeBlacklisted]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchPrograms();
     if (selectedProgram) {
       fetchProgramStats(selectedProgram);
+    }
+  };
+
+  const toggleLiveMode = () => {
+    setIsLiveMode(!isLiveMode);
+    if (!isLiveMode) {
+      setLastUpdate(new Date());
     }
   };
 
@@ -164,6 +256,33 @@ export default function Home() {
           >
             Search
           </button>
+          <button
+            type="button"
+            onClick={toggleLiveMode}
+            className={`px-6 py-2 rounded transition-colors flex items-center gap-2 ${
+              isLiveMode 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-gray-600 hover:bg-gray-700 text-white'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${
+              isLiveMode 
+                ? connectionStatus === 'connected' 
+                  ? 'bg-white animate-pulse' 
+                  : connectionStatus === 'connecting'
+                  ? 'bg-yellow-300 animate-spin'
+                  : 'bg-red-300'
+                : 'bg-gray-400'
+            }`}></div>
+            {isLiveMode 
+              ? connectionStatus === 'connected' 
+                ? 'Live Stream ON' 
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Stream Error'
+              : 'Enable Live Stream'
+            }
+          </button>
           <a
             href="/explorer"
             className="px-6 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors inline-block text-center"
@@ -179,9 +298,41 @@ export default function Home() {
         </div>
       </form>
 
+      {isLiveMode && lastUpdate && connectionStatus === 'connected' && (
+        <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
+          <div className="flex items-center gap-2 text-green-300 text-sm">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            Real-time SSE stream active • Last updated: {lastUpdate.toLocaleTimeString()}
+          </div>
+        </div>
+      )}
+      
+      {isLiveMode && connectionStatus === 'connecting' && (
+        <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-300 text-sm">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin"></div>
+            Connecting to real-time stream...
+          </div>
+        </div>
+      )}
+      
+      {isLiveMode && connectionStatus === 'disconnected' && (
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg">
+          <div className="flex items-center gap-2 text-red-300 text-sm">
+            <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+            Stream disconnected • Attempting to reconnect...
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div>
-          <h2 className="text-xl font-semibold mb-4">Top Programs</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Top Programs</h2>
+            {isLiveMode && connectionStatus === 'connected' && (
+              <span className="text-xs text-green-400">Real-time SSE stream</span>
+            )}
+          </div>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             {loading ? (
               <div className="p-8 text-center text-gray-500">Loading...</div>
@@ -226,14 +377,19 @@ export default function Home() {
             <h2 className="text-xl font-semibold">
               {selectedProgram ? 'Program Timeline' : 'Select a Program'}
             </h2>
-            {selectedProgram && (
-              <button
-                onClick={() => setSelectedProgram(null)}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm transition-colors flex items-center gap-1"
-              >
-                ✕ Close
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedProgram && isLiveMode && connectionStatus === 'connected' && (
+                <span className="text-xs text-green-400">Real-time SSE stream</span>
+              )}
+              {selectedProgram && (
+                <button
+                  onClick={() => setSelectedProgram(null)}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm transition-colors flex items-center gap-1"
+                >
+                  ✕ Close
+                </button>
+              )}
+            </div>
           </div>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             {!selectedProgram ? (

@@ -115,7 +115,7 @@ export default function BlockExplorer() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Update Frequency:</span>
-                <span>Every 2s</span>
+                <span>Every 1s</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Data Source:</span>

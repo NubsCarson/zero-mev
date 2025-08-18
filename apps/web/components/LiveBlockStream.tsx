@@ -9,6 +9,7 @@ interface Block {
   validator: string;
   total_invocations: number;
   unique_programs: number;
+  unique_transactions?: number;
 }
 
 interface LiveBlockStreamProps {
@@ -18,37 +19,133 @@ interface LiveBlockStreamProps {
 export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [isLive, setIsLive] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [fallbackMode, setFallbackMode] = useState(false);
 
   const fetchLatestBlocks = async () => {
     try {
       const response = await fetch('/api/blocks/current');
       if (response.ok) {
         const data = await response.json();
+        // Debug: log the first block's timestamp in fallback mode
+        if (data.length > 0) {
+          console.log('Fallback - First block timestamp:', data[0].block_time, 'parsed as:', new Date(data[0].block_time));
+        }
         setBlocks(data);
+        if (fallbackMode) {
+          setConnectionStatus('connected');
+        }
       }
     } catch (error) {
       console.error('Error fetching latest blocks:', error);
+      setConnectionStatus('disconnected');
     }
   };
 
   useEffect(() => {
-    fetchLatestBlocks();
-    
-    if (isLive) {
-      const interval = setInterval(fetchLatestBlocks, 2000); // Update every 2 seconds
+    if (!isLive) return;
+
+    if (fallbackMode) {
+      // Use polling fallback
+      fetchLatestBlocks();
+      const interval = setInterval(fetchLatestBlocks, 1000);
       return () => clearInterval(interval);
     }
-  }, [isLive]);
+
+    let eventSource: EventSource;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 3;
+    
+    const connectStream = () => {
+      setConnectionStatus('connecting');
+      eventSource = new EventSource('/api/stream/blocks');
+      
+      eventSource.onopen = () => {
+        setConnectionStatus('connected');
+        reconnectAttempts = 0;
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.error) {
+            console.error('SSE error from server:', data);
+            setConnectionStatus('disconnected');
+            return;
+          }
+          if (Array.isArray(data)) {
+            // Debug: log the first block's timestamp
+            if (data.length > 0) {
+              console.log('First block timestamp:', data[0].block_time, 'parsed as:', new Date(data[0].block_time));
+            }
+            setBlocks(data);
+          }
+        } catch (error) {
+          console.error('Error parsing SSE data:', error);
+        }
+      };
+      
+      eventSource.onerror = () => {
+        setConnectionStatus('disconnected');
+        eventSource.close();
+        
+        reconnectAttempts++;
+        if (reconnectAttempts >= maxReconnectAttempts) {
+          console.log('Max SSE reconnect attempts reached, falling back to polling');
+          setFallbackMode(true);
+          return;
+        }
+        
+        // Reconnect after 2 seconds
+        setTimeout(connectStream, 2000);
+      };
+    };
+    
+    connectStream();
+    
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [isLive, fallbackMode]);
 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date();
-    const blockTime = new Date(timestamp);
+    
+    // Parse the timestamp - should now be in ISO format from ClickHouse
+    let blockTime: Date;
+    try {
+      blockTime = new Date(timestamp);
+      
+      // If the parsed date is invalid, try alternative formats
+      if (isNaN(blockTime.getTime())) {
+        // Try with 'Z' suffix if not present
+        blockTime = new Date(timestamp.includes('Z') ? timestamp : timestamp + 'Z');
+      }
+      
+      // If still invalid, log and show raw timestamp
+      if (isNaN(blockTime.getTime())) {
+        console.error('Invalid timestamp format:', timestamp);
+        return timestamp;
+      }
+    } catch (error) {
+      console.error('Error parsing timestamp:', timestamp, error);
+      return timestamp;
+    }
+    
     const diffMs = now.getTime() - blockTime.getTime();
     const diffSeconds = Math.floor(diffMs / 1000);
     
+    // Handle future timestamps (shouldn't happen but just in case)
+    if (diffSeconds < 0) {
+      return 'just now';
+    }
+    
     if (diffSeconds < 60) return `${diffSeconds}s ago`;
     if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
-    return `${Math.floor(diffSeconds / 3600)}h ago`;
+    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
+    return `${Math.floor(diffSeconds / 86400)}d ago`;
   };
 
   const formatValidator = (validator: string) => {
@@ -60,9 +157,26 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
+          <div className={`w-3 h-3 rounded-full ${
+            isLive 
+              ? connectionStatus === 'connected' 
+                ? 'bg-green-500 animate-pulse' 
+                : connectionStatus === 'connecting'
+                ? 'bg-yellow-500 animate-spin'
+                : 'bg-red-500'
+              : 'bg-gray-500'
+          }`}></div>
           <h2 className="text-xl font-semibold">
-            {isLive ? 'Live Block Stream' : 'Block Stream (Paused)'}
+            {isLive 
+              ? connectionStatus === 'connected' 
+                ? fallbackMode 
+                  ? 'Live Block Stream (Polling Fallback)' 
+                  : 'Live Block Stream (Real-time SSE)'
+                : connectionStatus === 'connecting'
+                ? 'Connecting to Stream...'
+                : 'Stream Disconnected'
+              : 'Block Stream (Paused)'
+            }
           </h2>
         </div>
         <button

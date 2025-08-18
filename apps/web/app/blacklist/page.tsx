@@ -15,28 +15,73 @@ export default function Blacklist() {
   const [loading, setLoading] = useState(false);
   const [newProgramId, setNewProgramId] = useState('');
   const [newReason, setNewReason] = useState('');
+  const [isLive, setIsLive] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   
   const previewProgram = newProgramId.length >= 32 ? formatProgramDisplay(newProgramId) : null;
 
-  const fetchBlacklist = async () => {
+  const fetchBlacklist = async (isAutoUpdate = false) => {
     console.log('📋 Frontend: Fetching blacklist...');
-    setLoading(true);
+    if (!isAutoUpdate) setLoading(true);
     try {
       const response = await fetch('/api/blacklist');
       console.log('📥 Frontend: GET response status:', response.status);
       const data = await response.json();
       console.log('📊 Frontend: GET response data - entries count:', data.length, 'data:', data);
       setEntries(data);
+      setLastUpdate(new Date());
     } catch (error) {
       console.error('💥 Frontend: Error fetching blacklist:', error);
     } finally {
-      setLoading(false);
+      if (!isAutoUpdate) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchBlacklist();
   }, []);
+
+  useEffect(() => {
+    if (!isLive) return;
+
+    let eventSource: EventSource;
+    
+    const connectStream = () => {
+      setConnectionStatus('connecting');
+      eventSource = new EventSource('/api/stream/blacklist');
+      
+      eventSource.onopen = () => {
+        setConnectionStatus('connected');
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data)) {
+            setEntries(data);
+            setLastUpdate(new Date());
+          }
+        } catch (error) {
+          console.error('Error parsing blacklist SSE data:', error);
+        }
+      };
+      
+      eventSource.onerror = () => {
+        setConnectionStatus('disconnected');
+        eventSource.close();
+        setTimeout(connectStream, 2000);
+      };
+    };
+    
+    connectStream();
+    
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [isLive]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,13 +138,61 @@ export default function Blacklist() {
   return (
     <div className="container mx-auto p-6 max-w-5xl">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Program Blacklist</h1>
-        <a
-          href="/"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          Back to Dashboard
-        </a>
+        <div>
+          <h1 className="text-3xl font-bold">Program Blacklist</h1>
+          {isLive && lastUpdate && connectionStatus === 'connected' && (
+            <div className="flex items-center gap-2 text-green-400 text-sm mt-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              Real-time SSE stream active • Last updated: {lastUpdate.toLocaleTimeString()}
+            </div>
+          )}
+          {isLive && connectionStatus === 'connecting' && (
+            <div className="flex items-center gap-2 text-yellow-400 text-sm mt-2">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin"></div>
+              Connecting to real-time stream...
+            </div>
+          )}
+          {isLive && connectionStatus === 'disconnected' && (
+            <div className="flex items-center gap-2 text-red-400 text-sm mt-2">
+              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+              Stream disconnected • Reconnecting...
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setIsLive(!isLive)}
+            className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
+              isLive 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-gray-600 hover:bg-gray-700 text-white'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${
+              isLive 
+                ? connectionStatus === 'connected' 
+                  ? 'bg-white animate-pulse' 
+                  : connectionStatus === 'connecting'
+                  ? 'bg-yellow-300 animate-spin'
+                  : 'bg-red-300'
+                : 'bg-gray-400'
+            }`}></div>
+            {isLive 
+              ? connectionStatus === 'connected' 
+                ? 'Live Stream' 
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Stream Error'
+              : 'Static Mode'
+            }
+          </button>
+          <a
+            href="/"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Back to Dashboard
+          </a>
+        </div>
       </div>
 
       <form onSubmit={handleAdd} className="bg-gray-800 p-6 rounded-lg mb-8">
@@ -141,7 +234,12 @@ export default function Blacklist() {
       </form>
 
       <div className="bg-gray-800 rounded-lg overflow-hidden">
-        <h2 className="text-xl font-semibold p-4 border-b border-gray-700">Current Blacklist</h2>
+        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+          <h2 className="text-xl font-semibold">Current Blacklist</h2>
+          {isLive && connectionStatus === 'connected' && (
+            <span className="text-xs text-green-400">Real-time SSE stream</span>
+          )}
+        </div>
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading...</div>
         ) : entries.length === 0 ? (

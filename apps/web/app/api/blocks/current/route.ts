@@ -11,10 +11,11 @@ export async function GET() {
       query: `
         SELECT 
           slot,
-          block_time,
+          formatDateTime(block_time, '%Y-%m-%dT%H:%M:%SZ', 'UTC') as block_time,
           validator,
           count() as total_invocations,
-          countDistinct(program_id) as unique_programs
+          countDistinct(program_id) as unique_programs,
+          countDistinct(tx_sig) as unique_transactions
         FROM ${env.CLICKHOUSE_DB}.program_invocations
         WHERE slot >= (SELECT max(slot) - 20 FROM ${env.CLICKHOUSE_DB}.program_invocations)
         GROUP BY slot, block_time, validator
