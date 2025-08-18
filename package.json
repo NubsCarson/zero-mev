@@ -1,0 +1,23 @@
+{
+  "name": "solana-program-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm run migrate && concurrently \"pnpm run dev:web\" \"pnpm run dev:worker\"",
+    "dev:db": "docker-compose -f docker/docker-compose.yml up -d",
+    "dev:web": "pnpm --filter web dev",
+    "dev:worker": "cd apps/worker && npx tsx src/ingest.ts",
+    "migrate": "pnpm --filter db migrate",
+    "build": "turbo run build",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "turbo": "^1.13.4"
+  },
+  "packageManager": "pnpm@8.15.1"
+}

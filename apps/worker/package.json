@@ -1,0 +1,20 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/ingest.ts",
+    "start": "tsx src/ingest.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.2",
+    "db": "workspace:*",
+    "p-limit": "^3.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "tsx": "^3.14.0",
+    "typescript": "^5.5.3"
+  }
+}
