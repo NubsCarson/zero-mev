@@ -10,3 +10,6 @@ dist/
 coverage/
 .vscode/
 .idea/
+fish-trader/
+CLAUDE.md
+.claude/
