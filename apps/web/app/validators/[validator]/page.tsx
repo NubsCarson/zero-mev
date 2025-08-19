@@ -19,6 +19,32 @@ interface ValidatorSlot {
   }>;
 }
 
+interface ValidatorHistory {
+  stats: {
+    validator: string;
+    min_slot: number;
+    max_slot: number;
+    total_slots: number;
+    total_invocations: number;
+    unique_programs: number;
+    first_block_time: string;
+    last_block_time: string;
+    slot_range: string;
+    duration_days: number;
+  } | null;
+  programs: Array<{
+    program_id: string;
+    name: string;
+    category: string;
+    color: string;
+    bgColor: string;
+    invocations: number;
+    percentage: number;
+    slots_used: number;
+    slot_percentage: number;
+  }>;
+}
+
 export default function ValidatorDetailPage() {
   const params = useParams();
   const validator = params.validator as string;
@@ -29,6 +55,9 @@ export default function ValidatorDetailPage() {
   const [totalSlots, setTotalSlots] = useState(0);
   const [excludeBlacklisted, setExcludeBlacklisted] = useState(true);
   const [expandedSlots, setExpandedSlots] = useState<Set<number>>(new Set());
+  const [history, setHistory] = useState<ValidatorHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showMorePrograms, setShowMorePrograms] = useState(0);
   
   const slotsPerPage = 50;
 
@@ -60,8 +89,35 @@ export default function ValidatorDetailPage() {
     }
   };
 
+  const fetchValidatorHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const params = new URLSearchParams({
+        validator,
+        excludeBlacklisted: excludeBlacklisted.toString(),
+      });
+      
+      const response = await fetch(`/api/validator-history?${params}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setHistory(data);
+      } else {
+        console.error('API error:', data);
+        setHistory(null);
+      }
+    } catch (error) {
+      console.error('Error fetching validator history:', error);
+      setHistory(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchValidatorSlots();
+    fetchValidatorHistory();
+    setShowMorePrograms(0); // Reset when filters change
   }, [validator, currentPage, excludeBlacklisted]);
 
   const totalPages = Math.ceil(totalSlots / slotsPerPage);
@@ -141,18 +197,144 @@ export default function ValidatorDetailPage() {
           </div>
         </div>
 
+        {/* Full-Time History Summary */}
+        {historyLoading ? (
+          <div className="bg-card rounded-lg border border-border p-6 mb-6">
+            <div className="animate-pulse">
+              <div className="h-6 bg-muted rounded w-48 mb-4"></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-8 bg-muted rounded"></div>
+                    <div className="h-4 bg-muted rounded w-20"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : history?.stats ? (
+          <div className="bg-card rounded-lg border border-border mb-6">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                <Calendar className="w-5 h-5" />
+                Full-Time History
+              </h2>
+              
+              {/* Overall Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-primary">{history.stats.slot_range}</div>
+                  <div className="text-sm text-muted-foreground">Slot Range</div>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-success">{formatNumber(history.stats.total_slots)}</div>
+                  <div className="text-sm text-muted-foreground">Total Slots</div>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-accent">{formatNumber(history.stats.total_invocations)}</div>
+                  <div className="text-sm text-muted-foreground">Total Invocations</div>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-purple-400">{history.stats.duration_days}</div>
+                  <div className="text-sm text-muted-foreground">Days Active</div>
+                </div>
+              </div>
+
+              {/* Program Usage */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Program Usage Distribution</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {history.programs.slice(0, 12 + showMorePrograms * 50).map((program) => (
+                    <div
+                      key={program.program_id}
+                      className={`p-3 rounded-lg border ${program.bgColor} border-opacity-50 bg-opacity-30`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-sm font-medium ${program.color}`}>
+                          {program.name}
+                        </span>
+                        <span className={`text-xs px-2 py-1 rounded ${program.bgColor} ${program.color}`}>
+                          {program.category}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {formatNumber(program.invocations)} calls
+                          </span>
+                          <span className="font-bold text-foreground">
+                            {program.percentage}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {formatNumber(program.slots_used)} slots
+                          </span>
+                          <span className="font-bold text-foreground">
+                            {program.slot_percentage}%
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${program.bgColor} opacity-80`}
+                              style={{ width: `${Math.min(program.percentage, 100)}%` }}
+                            />
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1">
+                            <div 
+                              className={`h-1 rounded-full ${program.bgColor} opacity-60`}
+                              style={{ width: `${Math.min(program.slot_percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {history.programs.length > 12 + showMorePrograms * 50 && (
+                  <div className="text-center space-x-2">
+                    <button
+                      onClick={() => setShowMorePrograms(prev => prev + 1)}
+                      className="text-sm text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded border border-border hover:bg-muted"
+                    >
+                      Show 50 more programs... ({history.programs.length - (12 + showMorePrograms * 50)} remaining)
+                    </button>
+                    <button
+                      onClick={() => setShowMorePrograms(Math.ceil((history.programs.length - 12) / 50))}
+                      className="text-sm text-accent hover:text-accent/80 transition-colors px-4 py-2 rounded border border-border hover:bg-muted"
+                    >
+                      Show all {history.programs.length} programs
+                    </button>
+                  </div>
+                )}
+                {showMorePrograms > 0 && (
+                  <div className="text-center">
+                    <button
+                      onClick={() => setShowMorePrograms(0)}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2 rounded border border-border hover:bg-muted"
+                    >
+                      Show fewer programs
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Stats summary */}
         {totalSlots > 0 && (
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="bg-card rounded-lg p-4 border border-border">
               <div className="text-2xl font-bold text-primary">{formatNumber(totalSlots)}</div>
-              <div className="text-sm text-muted-foreground">Total Slots</div>
+              <div className="text-sm text-muted-foreground">Recent Slots</div>
             </div>
             <div className="bg-card rounded-lg p-4 border border-border">
               <div className="text-2xl font-bold text-success">
                 {formatNumber(slots.reduce((sum, s) => sum + s.total_invocations, 0))}
               </div>
-              <div className="text-sm text-muted-foreground">Total Invocations</div>
+              <div className="text-sm text-muted-foreground">Recent Invocations</div>
             </div>
             <div className="bg-card rounded-lg p-4 border border-border">
               <div className="text-2xl font-bold text-accent">
