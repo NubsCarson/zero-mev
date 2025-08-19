@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowUpDown, Hammer, HelpCircle, TrendingUp, Users, BarChart3, Search } from 'lucide-react';
+import { ArrowUpDown, Hammer, HelpCircle, TrendingUp, Users, BarChart3, Search, ExternalLink } from 'lucide-react';
 import ProgramTag from '@/components/ProgramTag';
 import HeaderNav from '@/components/HeaderNav';
+import Link from 'next/link';
 
 interface ValidatorProgram {
   program_id: string;
@@ -31,14 +32,6 @@ export default function ValidatorsPage() {
   const [showTop100, setShowTop100] = useState(false);
   const [sortField, setSortField] = useState<SortField>('total_invocations');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [from, setFrom] = useState<string>(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return date.toISOString().split('T')[0];
-  });
-  const [to, setTo] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
-  });
   const [excludeBlacklisted, setExcludeBlacklisted] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [validatorsPerPage] = useState(10);
@@ -53,8 +46,6 @@ export default function ValidatorsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
         limit: '100',
         excludeBlacklisted: excludeBlacklisted.toString(),
       });
@@ -88,8 +79,6 @@ export default function ValidatorsPage() {
       // First get details for the specific validator
       const params = new URLSearchParams({
         validator: validatorAddress,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
         excludeBlacklisted: excludeBlacklisted.toString(),
       });
       
@@ -127,14 +116,12 @@ export default function ValidatorsPage() {
     } finally {
       setSearchLoading(false);
     }
-  }, [from, to, excludeBlacklisted]);
+  }, [excludeBlacklisted]);
 
   const fetchValidatorDetails = async (validatorId: string) => {
     try {
       const params = new URLSearchParams({
         validator: validatorId,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
         excludeBlacklisted: excludeBlacklisted.toString(),
       });
       
@@ -303,38 +290,16 @@ export default function ValidatorsPage() {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">From Date</label>
+        <div className="mb-4">
+          <label className="flex items-center">
             <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none"
+              type="checkbox"
+              checked={excludeBlacklisted}
+              onChange={(e) => setExcludeBlacklisted(e.target.checked)}
+              className="mr-2"
             />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">To Date</label>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none"
-            />
-          </div>
-          
-          <div className="flex items-end">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={excludeBlacklisted}
-                onChange={(e) => setExcludeBlacklisted(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm">Exclude Blacklisted</span>
-            </label>
-          </div>
+            <span className="text-sm">Exclude Blacklisted Programs</span>
+          </label>
         </div>
         
         <div className="flex gap-4">
@@ -383,6 +348,14 @@ export default function ValidatorsPage() {
                         ▼ Details
                       </span>
                     )}
+                    <Link
+                      href={`/validators/${searchedValidator.validator}`}
+                      className="ml-auto flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View All Slots
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
                   </div>
                 </div>
 
@@ -590,6 +563,14 @@ export default function ValidatorsPage() {
                             ▼ Details
                           </span>
                         )}
+                        <Link
+                          href={`/validators/${validator.validator}`}
+                          className="ml-auto flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          View All Slots
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
                       </div>
                     </div>
 

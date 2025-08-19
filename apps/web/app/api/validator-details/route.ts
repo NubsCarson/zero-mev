@@ -9,8 +9,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   
   const validator = searchParams.get('validator');
-  const from = searchParams.get('from') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const to = searchParams.get('to') || new Date().toISOString();
   const excludeBlacklisted = searchParams.get('excludeBlacklisted') === 'true';
 
   if (!validator) {
@@ -21,22 +19,19 @@ export async function GET(request: NextRequest) {
     // Get DeFi programs from programlist.json
     const defiPrograms = Object.keys(programList);
 
-    // Get detailed program usage for specific validator
+    // Get detailed program usage for specific validator (all programs)
     const validatorDetailsQuery = `
       SELECT 
         program_id,
         count() as invocations,
         round(count() * 100.0 / sum(count()) OVER (), 2) as percentage
       FROM ${env.CLICKHOUSE_DB}.program_invocations pi
-      WHERE program_id IN (${defiPrograms.map(p => `'${p}'`).join(',')})
+      WHERE validator = {validator:String}
       ${excludeBlacklisted ? `
       AND program_id NOT IN (
         SELECT program_id FROM ${env.CLICKHOUSE_DB}.program_blacklist FINAL 
         WHERE reason != ''
       )` : ''}
-      AND validator = {validator:String}
-      AND block_time >= {from:DateTime}
-      AND block_time <= {to:DateTime}
       GROUP BY program_id
       ORDER BY invocations DESC
     `;
@@ -46,9 +41,7 @@ export async function GET(request: NextRequest) {
     const result = await client.query({
       query: validatorDetailsQuery,
       query_params: {
-        validator: validator,
-        from: from.replace('Z', '').split('.')[0],
-        to: to.replace('Z', '').split('.')[0]
+        validator: validator
       },
       format: 'JSONEachRow',
     });

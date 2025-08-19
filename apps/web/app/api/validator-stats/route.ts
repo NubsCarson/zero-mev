@@ -29,8 +29,6 @@ export async function GET(request: NextRequest) {
   const client = getClickHouseClient();
   const { searchParams } = new URL(request.url);
   
-  const from = searchParams.get('from') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const to = searchParams.get('to') || new Date().toISOString();
   const limit = parseInt(searchParams.get('limit') || '50');
   const excludeBlacklisted = searchParams.get('excludeBlacklisted') === 'true';
 
@@ -52,21 +50,19 @@ export async function GET(request: NextRequest) {
     // Get DeFi programs from programlist.json
     const defiPrograms = Object.keys(programList);
 
-    // First, get overall validator stats (focusing on DeFi programs)
+    // First, get overall validator stats (all programs, not just DeFi)
     const validatorStatsQuery = `
       SELECT 
         validator,
         count() as total_invocations,
         uniq(program_id) as unique_programs
       FROM ${env.CLICKHOUSE_DB}.program_invocations pi
-      WHERE program_id IN (${defiPrograms.map(p => `'${p}'`).join(',')})
+      WHERE 1=1
       ${excludeBlacklisted ? `
-      AND validator NOT IN (
+      AND program_id NOT IN (
         SELECT program_id FROM ${env.CLICKHOUSE_DB}.program_blacklist FINAL 
         WHERE reason != ''
       )` : ''}
-      AND block_time >= {from:DateTime}
-      AND block_time <= {to:DateTime}
       GROUP BY validator
       ORDER BY total_invocations DESC
       LIMIT ${limit}
@@ -76,10 +72,7 @@ export async function GET(request: NextRequest) {
 
     const validatorStatsResult = await client.query({
       query: validatorStatsQuery,
-      query_params: {
-        from: from.replace('Z', '').split('.')[0],
-        to: to.replace('Z', '').split('.')[0]
-      },
+      query_params: {},
       format: 'JSONEachRow',
     });
 
@@ -94,15 +87,12 @@ export async function GET(request: NextRequest) {
             program_id,
             count() as invocations
           FROM ${env.CLICKHOUSE_DB}.program_invocations pi
-          WHERE program_id IN (${defiPrograms.map(p => `'${p}'`).join(',')})
+          WHERE validator = {validator:String}
           ${excludeBlacklisted ? `
           AND program_id NOT IN (
             SELECT program_id FROM ${env.CLICKHOUSE_DB}.program_blacklist FINAL 
             WHERE reason != ''
           )` : ''}
-          AND validator = {validator:String}
-          AND block_time >= {from:DateTime}
-          AND block_time <= {to:DateTime}
           GROUP BY program_id
           ORDER BY invocations DESC
           LIMIT 5
@@ -111,9 +101,7 @@ export async function GET(request: NextRequest) {
         const topProgramsResult = await client.query({
           query: topProgramsQuery,
           query_params: {
-            validator: validator.validator,
-            from: from.replace('Z', '').split('.')[0],
-            to: to.replace('Z', '').split('.')[0]
+            validator: validator.validator
           },
           format: 'JSONEachRow',
         });
