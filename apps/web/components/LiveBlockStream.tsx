@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hammer, HelpCircle, BarChart3 } from 'lucide-react';
 import { formatProgramDisplay } from '@/lib/programRegistry';
 
@@ -35,29 +35,80 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
   const [isLive, setIsLive] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [fallbackMode, setFallbackMode] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [blocksPerPage] = useState(5);
+  
+  // Refs for performance optimization
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const programStatsCache = useRef<Map<number, BlockProgramStats[]>>(new Map());
+  const lastProcessedSlot = useRef<number>(0);
+  const isProcessing = useRef<boolean>(false);
+  
+  // Constants for memory management
+  const MAX_BLOCKS = 50; // Maximum blocks to keep in memory
+  const CACHE_SIZE = 100; // Maximum cached program stats
+  const PROGRAM_STATS_BATCH_SIZE = 3; // Only fetch program stats for first N blocks
+
+  // Memory management utilities
+  const cleanupOldBlocks = useCallback((newBlocks: BlockWithPrograms[]) => {
+    if (newBlocks.length > MAX_BLOCKS) {
+      const trimmedBlocks = newBlocks.slice(0, MAX_BLOCKS);
+      // Clear cache entries for removed blocks
+      const removedSlots = newBlocks.slice(MAX_BLOCKS).map(b => b.slot);
+      removedSlots.forEach(slot => programStatsCache.current.delete(slot));
+      return trimmedBlocks;
+    }
+    return newBlocks;
+  }, []);
+
+  const cleanupCache = useCallback(() => {
+    if (programStatsCache.current.size > CACHE_SIZE) {
+      const entries = Array.from(programStatsCache.current.entries());
+      const toKeep = entries.slice(-CACHE_SIZE);
+      programStatsCache.current.clear();
+      toKeep.forEach(([slot, stats]) => {
+        programStatsCache.current.set(slot, stats);
+      });
+    }
+  }, []);
 
   const fetchLatestBlocks = async () => {
+    if (isProcessing.current) return;
+    isProcessing.current = true;
+    
     try {
       const response = await fetch('/api/blocks/current');
       if (response.ok) {
         const blocksData: Block[] = await response.json();
         
-        // Fetch program stats for the first 5 blocks for better coverage
+        // Only fetch program stats for the first few blocks to reduce API load
         const blocksWithPrograms = await Promise.all(
-          blocksData.slice(0, 5).map(async (block, index) => {
-            // Add delay between API calls to prevent spam
-            if (index > 0) {
-              await new Promise(resolve => setTimeout(resolve, 80));
+          blocksData.map(async (block, index) => {
+            if (index < PROGRAM_STATS_BATCH_SIZE) {
+              // Check cache first
+              let programStats = programStatsCache.current.get(block.slot);
+              if (!programStats) {
+                // Add exponential delay for API calls
+                if (index > 0) {
+                  await new Promise(resolve => setTimeout(resolve, index * 100));
+                }
+                programStats = await fetchBlockProgramStats(block.slot);
+                programStatsCache.current.set(block.slot, programStats);
+              }
+              return { ...block, programStats };
+            } else {
+              // Don't fetch program stats for older blocks to save resources
+              return { ...block, programStats: [] };
             }
-            const programStats = await fetchBlockProgramStats(block.slot);
-            return { ...block, programStats };
           })
         );
         
-        // Add remaining blocks without program stats
-        const remainingBlocks = blocksData.slice(5).map(block => ({ ...block, programStats: undefined }));
+        const cleanedBlocks = cleanupOldBlocks(blocksWithPrograms);
+        setBlocks(cleanedBlocks);
+        cleanupCache();
         
-        setBlocks([...blocksWithPrograms, ...remainingBlocks]);
+        // Only reset pagination if we're on page 1 or if significant data changes
         if (fallbackMode) {
           setConnectionStatus('connected');
         }
@@ -65,6 +116,8 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     } catch (error) {
       console.error('Error fetching latest blocks:', error);
       setConnectionStatus('disconnected');
+    } finally {
+      isProcessing.current = false;
     }
   };
 
@@ -79,30 +132,111 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     }
   };
 
-  useEffect(() => {
-    if (!isLive) return;
+  // Optimized SSE processing with throttling
+  const processSSEData = useCallback(async (data: Block[]) => {
+    if (isProcessing.current) return;
+    isProcessing.current = true;
 
-    if (fallbackMode) {
-      // Use polling fallback
-      fetchLatestBlocks();
-      const interval = setInterval(fetchLatestBlocks, 1000);
-      return () => clearInterval(interval);
+    try {
+      // Filter out already processed blocks
+      const newBlocks = data.filter(block => block.slot > lastProcessedSlot.current);
+      if (newBlocks.length === 0) {
+        isProcessing.current = false;
+        return;
+      }
+
+      // Update last processed slot
+      if (newBlocks.length > 0) {
+        lastProcessedSlot.current = Math.max(...newBlocks.map(b => b.slot));
+      }
+
+      // Only fetch program stats for the newest blocks to reduce API spam
+      const blocksWithPrograms = await Promise.all(
+        newBlocks.map(async (block, index) => {
+          if (index < PROGRAM_STATS_BATCH_SIZE) {
+            // Check cache first
+            let programStats = programStatsCache.current.get(block.slot);
+            if (!programStats) {
+              // Staggered API calls with exponential backoff
+              if (index > 0) {
+                await new Promise(resolve => setTimeout(resolve, index * 150));
+              }
+              programStats = await fetchBlockProgramStats(block.slot);
+              programStatsCache.current.set(block.slot, programStats);
+            }
+            return { ...block, programStats };
+          } else {
+            return { ...block, programStats: [] };
+          }
+        })
+      );
+
+      // Merge with existing blocks and clean up
+      setBlocks(prevBlocks => {
+        const mergedBlocks = [...blocksWithPrograms, ...prevBlocks];
+        const uniqueBlocks = mergedBlocks.filter((block, index, self) => 
+          index === self.findIndex(b => b.slot === block.slot)
+        );
+        const sortedBlocks = uniqueBlocks.sort((a, b) => b.slot - a.slot);
+        return cleanupOldBlocks(sortedBlocks);
+      });
+
+      cleanupCache();
+      
+      // Only reset pagination if we're on first page
+      if (currentPage === 1) {
+        resetPaginationOnNewData();
+      }
+    } catch (error) {
+      console.error('Error processing SSE data:', error);
+    } finally {
+      isProcessing.current = false;
+    }
+  }, [cleanupOldBlocks, cleanupCache, currentPage]);
+
+  useEffect(() => {
+    if (!isLive) {
+      // Clean up when not live
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
     }
 
-    let eventSource: EventSource;
+    if (fallbackMode) {
+      // Use optimized polling fallback
+      fetchLatestBlocks();
+      intervalRef.current = setInterval(fetchLatestBlocks, 2000); // Reduced frequency
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      };
+    }
+
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 3;
     
     const connectStream = () => {
-      setConnectionStatus('connecting');
-      eventSource = new EventSource('/api/stream/blocks');
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
       
-      eventSource.onopen = () => {
+      setConnectionStatus('connecting');
+      eventSourceRef.current = new EventSource('/api/stream/blocks');
+      
+      eventSourceRef.current.onopen = () => {
         setConnectionStatus('connected');
         reconnectAttempts = 0;
       };
       
-      eventSource.onmessage = (event) => {
+      eventSourceRef.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.error) {
@@ -111,35 +245,20 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
             return;
           }
           if (Array.isArray(data)) {
-            // Process blocks with throttling to reduce API spam
-            const processBlocks = async () => {
-              // Fetch program stats for the first 5 blocks from SSE for better coverage
-              const blocksWithPrograms = await Promise.all(
-                data.slice(0, 5).map(async (block: Block, index) => {
-                  // Add delay between API calls
-                  if (index > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                  }
-                  const programStats = await fetchBlockProgramStats(block.slot);
-                  return { ...block, programStats };
-                })
-              );
-              
-              // Add remaining blocks without program stats
-              const remainingBlocks = data.slice(5).map(block => ({ ...block, programStats: undefined }));
-              
-              setBlocks([...blocksWithPrograms, ...remainingBlocks]);
-            };
-            processBlocks();
+            // Use throttled processing
+            processSSEData(data);
           }
         } catch (error) {
           console.error('Error parsing SSE data:', error);
         }
       };
       
-      eventSource.onerror = () => {
+      eventSourceRef.current.onerror = () => {
         setConnectionStatus('disconnected');
-        eventSource.close();
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
+        }
         
         reconnectAttempts++;
         if (reconnectAttempts >= maxReconnectAttempts) {
@@ -148,19 +267,38 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
           return;
         }
         
-        // Reconnect after 2 seconds
-        setTimeout(connectStream, 2000);
+        // Exponential backoff for reconnection
+        setTimeout(connectStream, Math.min(2000 * Math.pow(2, reconnectAttempts), 10000));
       };
     };
     
     connectStream();
     
     return () => {
-      if (eventSource) {
-        eventSource.close();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
     };
-  }, [isLive, fallbackMode]);
+  }, [isLive, fallbackMode, processSSEData]);
+
+  // Cleanup effect on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up all resources on unmount
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      // Clear caches
+      programStatsCache.current.clear();
+      isProcessing.current = false;
+    };
+  }, []);
 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date();
@@ -223,6 +361,42 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     );
   };
 
+  // Optimized pagination reset - only reset when necessary
+  const resetPaginationOnNewData = useCallback(() => {
+    // Only reset if we're on live mode and have new data that would affect current view
+    if (isLive && currentPage === 1) {
+      // Already on first page, no need to reset
+      return;
+    }
+    if (isLive && currentPage > 1) {
+      // Reset to first page only if we have significant new data
+      setCurrentPage(1);
+    }
+  }, [isLive, currentPage]);
+
+  // Optimized block rendering with memoization
+  const paginatedBlocks = useMemo(() => {
+    const totalPages = Math.ceil(blocks.length / blocksPerPage);
+    const startIndex = (currentPage - 1) * blocksPerPage;
+    const endIndex = startIndex + blocksPerPage;
+    return {
+      blocks: blocks.slice(startIndex, endIndex),
+      totalPages,
+      startIndex,
+      endIndex
+    };
+  }, [blocks, currentPage, blocksPerPage]);
+
+  // Use optimized pagination from memoized calculation
+  const { blocks: currentBlocks, totalPages, startIndex, endIndex } = paginatedBlocks;
+
+  // Navigation functions
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToPreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages, currentPage + 1));
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToPage = (page: number) => setCurrentPage(Math.max(1, Math.min(totalPages, page)));
+
   return (
     <div className="bg-card border border-border rounded-lg p-6 min-h-[800px]">
       {/* Header */}
@@ -263,9 +437,16 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
       </div>
 
       {/* Main Content */}
-      <div className="h-[700px]">
-        <div className="space-y-2 h-full overflow-y-auto">
-        {blocks.map((block, index) => (
+      <div className="h-[700px] flex flex-col">
+        {/* Pagination Info */}
+        <div className="flex items-center justify-between mb-4 text-sm text-muted-foreground">
+          <span>Showing {startIndex + 1}-{Math.min(endIndex, blocks.length)} of {blocks.length} blocks</span>
+          <span>Page {currentPage} of {totalPages}</span>
+        </div>
+
+        {/* Blocks Display */}
+        <div className="flex-1 space-y-2 overflow-y-auto">
+        {currentBlocks.map((block, index) => (
           <div
             key={block.slot}
             className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:bg-muted/50 ${
@@ -311,14 +492,14 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
               {formatValidator(block.validator)}
             </div>
             
-            {/* Program Breakdown */}
+            {/* Program Breakdown - Only show for blocks with program stats */}
             {block.programStats && block.programStats.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border">
                 <div className="text-xs text-muted-foreground mb-2">Top Programs:</div>
                 <div className="flex flex-wrap gap-2">
-                  {block.programStats.slice(0, 6).map((program) => (
+                  {block.programStats.slice(0, 4).map((program) => (
                     <div
-                      key={program.program_id}
+                      key={`${block.slot}-${program.program_id}`}
                       className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${program.bgColor} border border-opacity-50`}
                     >
                       <span className={`${program.color} font-medium`}>
@@ -329,11 +510,22 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
                       </span>
                     </div>
                   ))}
-                  {block.programStats.length > 6 && (
+                  {block.programStats.length > 4 && (
                     <div className="px-2 py-1 bg-muted rounded-full text-xs text-muted-foreground">
-                      +{block.programStats.length - 6} more
+                      +{block.programStats.length - 4} more
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+            {/* Show loading indicator for blocks without program stats */}
+            {(!block.programStats || block.programStats.length === 0) && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="text-xs text-muted-foreground mb-2">Loading programs...</div>
+                <div className="flex gap-2">
+                  <div className="px-3 py-1 bg-muted/50 rounded-full text-xs text-muted-foreground animate-pulse">
+                    ●●●
+                  </div>
                 </div>
               </div>
             )}
@@ -347,6 +539,60 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
           </div>
         )}
         </div>
+
+        {/* Pagination Controls */}
+        {blocks.length > 0 && totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToFirstPage}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                First
+              </button>
+              <button
+                onClick={goToPreviousPage}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Go to page:</span>
+              <select
+                value={currentPage}
+                onChange={(e) => goToPage(Number(e.target.value))}
+                className="px-2 py-1 text-sm bg-muted border border-border rounded focus:border-ring focus:outline-none"
+              >
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+              <button
+                onClick={goToLastPage}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

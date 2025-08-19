@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Star, Radio, Search, Settings, BarChart3, ArrowLeft } from 'lucide-react';
+import { Radio, Search, Settings, BarChart3 } from 'lucide-react';
 import LiveBlockStream from '@/components/LiveBlockStream';
 import BlockAnalysis from '@/components/BlockAnalysis';
 import ValidatorExplorer from '@/components/ValidatorExplorer';
 import CategoryLegend from '@/components/CategoryLegend';
+import HeaderNav from '@/components/HeaderNav';
 
 export default function BlockExplorer() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -18,29 +19,11 @@ export default function BlockExplorer() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Star className="w-6 h-6" />
-                Solana Block Explorer
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Real-time blockchain monitoring and analysis
-              </p>
-            </div>
-            <a
-              href="/"
-              className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/90 transition-colors border border-border flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Dashboard
-            </a>
-          </div>
-        </div>
-      </div>
+      {/* Header Navigation */}
+      <HeaderNav 
+        title="Block Explorer"
+        subtitle="Real-time blockchain monitoring and analysis"
+      />
 
       {/* Navigation and Content */}
       <div className="container mx-auto px-6 py-6">

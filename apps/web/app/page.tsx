@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Star, BarChart3, Clock, TrendingUp, X } from 'lucide-react';
+import { BarChart3, Clock, TrendingUp, X } from 'lucide-react';
 import LineChart from '@/components/LineChart';
 import ProgramTag from '@/components/ProgramTag';
 import CategoryLegend from '@/components/CategoryLegend';
+import HeaderNav from '@/components/HeaderNav';
 import { formatProgramDisplay } from '@/lib/programRegistry';
 
 interface Program {
@@ -37,6 +38,8 @@ export default function Home() {
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const [currentProgramsPage, setCurrentProgramsPage] = useState(1);
+  const [programsPerPage] = useState(5);
 
   const fetchPrograms = async (isAutoUpdate = false) => {
     if (!isAutoUpdate) setLoading(true);
@@ -55,6 +58,10 @@ export default function Home() {
       if (response.ok && Array.isArray(data)) {
         setPrograms(data);
         setLastUpdate(new Date());
+        // Reset to first page when manually fetching new data
+        if (!isAutoUpdate) {
+          setCurrentProgramsPage(1);
+        }
       } else {
         console.error('API error:', data);
         setPrograms([]);
@@ -127,6 +134,8 @@ export default function Home() {
           if (Array.isArray(data)) {
             setPrograms(data);
             setLastUpdate(new Date());
+            // Reset to first page when new data arrives in live mode
+            setCurrentProgramsPage(1);
           }
         } catch (error) {
           console.error('Error parsing programs SSE data:', error);
@@ -201,16 +210,15 @@ export default function Home() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold mb-4">Solana Program Tracker</h1>
-        <p className="text-muted-foreground">Real-time blockchain monitoring and program analysis</p>
-      </div>
-
-      {/* Program Categories Dropdown - Moved to top */}
-      <div className="mb-6">
-        <CategoryLegend isDropdown={true} />
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Header Navigation */}
+      <HeaderNav />
+      
+      <div className="container mx-auto p-6 max-w-7xl">
+        {/* Program Categories Dropdown */}
+        <div className="mb-6">
+          <CategoryLegend isDropdown={true} />
+        </div>
       
       <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg mb-8 border border-border shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -292,19 +300,6 @@ export default function Home() {
               : 'Enable Live Stream'
             }
           </button>
-          <a
-            href="/explorer"
-            className="px-8 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground rounded-lg hover:from-primary/90 hover:to-accent/90 transition-all duration-200 inline-block text-center flex items-center gap-3 shadow-lg hover:shadow-xl transform hover:scale-105 border border-primary/50"
-          >
-            <Star className="w-5 h-5" />
-            <span className="font-semibold text-lg">Block Explorer</span>
-          </a>
-          <a
-            href="/blacklist"
-            className="px-6 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/90 transition-colors flex items-center justify-center border border-border"
-          >
-            Manage Blacklist
-          </a>
         </div>
       </form>
 
@@ -339,6 +334,11 @@ export default function Home() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Top Programs</h2>
+            {programs.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                Page {currentProgramsPage} of {Math.ceil(programs.length / programsPerPage)}
+              </span>
+            )}
           </div>
           <div className="bg-card rounded-lg overflow-hidden border border-border">
             {loading ? (
@@ -346,35 +346,97 @@ export default function Home() {
             ) : programs.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">No programs found</div>
             ) : (
-              <table className="w-full">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Program</th>
-                    <th className="px-4 py-3 text-right">Invocations</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {programs.map((program) => (
-                    <tr
-                      key={program.program_id}
-                      className={`border-t border-border hover:bg-muted/50 cursor-pointer transition-colors ${
-                        selectedProgram === program.program_id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => handleProgramClick(program.program_id)}
-                    >
-                      <td className="px-4 py-3">
-                        <ProgramTag 
-                          programId={program.program_id}
-                          onClick={() => handleProgramClick(program.program_id)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold">
-                        {program.cnt.toLocaleString()}
-                      </td>
+              <>
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Program</th>
+                      <th className="px-4 py-3 text-right">Invocations</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const startIndex = (currentProgramsPage - 1) * programsPerPage;
+                      const endIndex = startIndex + programsPerPage;
+                      const paginatedPrograms = programs.slice(startIndex, endIndex);
+                      
+                      return paginatedPrograms.map((program) => (
+                        <tr
+                          key={program.program_id}
+                          className={`border-t border-border hover:bg-muted/50 cursor-pointer transition-colors ${
+                            selectedProgram === program.program_id ? 'bg-muted' : ''
+                          }`}
+                          onClick={() => handleProgramClick(program.program_id)}
+                        >
+                          <td className="px-4 py-3">
+                            <ProgramTag 
+                              programId={program.program_id}
+                              onClick={() => handleProgramClick(program.program_id)}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold">
+                            {program.cnt.toLocaleString()}
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+                
+                {/* Pagination Controls */}
+                {Math.ceil(programs.length / programsPerPage) > 1 && (
+                  <div className="p-4 bg-muted/30 border-t border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentProgramsPage(1)}
+                        disabled={currentProgramsPage === 1}
+                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        First
+                      </button>
+                      <button
+                        onClick={() => setCurrentProgramsPage(Math.max(1, currentProgramsPage - 1))}
+                        disabled={currentProgramsPage === 1}
+                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Go to page:</span>
+                      <select
+                        value={currentProgramsPage}
+                        onChange={(e) => setCurrentProgramsPage(Number(e.target.value))}
+                        className="px-2 py-1 text-sm bg-muted border border-border rounded focus:border-ring focus:outline-none"
+                      >
+                        {Array.from({ length: Math.ceil(programs.length / programsPerPage) }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentProgramsPage(Math.min(Math.ceil(programs.length / programsPerPage), currentProgramsPage + 1))}
+                        disabled={currentProgramsPage === Math.ceil(programs.length / programsPerPage)}
+                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                      <button
+                        onClick={() => setCurrentProgramsPage(Math.ceil(programs.length / programsPerPage))}
+                        disabled={currentProgramsPage === Math.ceil(programs.length / programsPerPage)}
+                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Last
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -531,6 +593,7 @@ export default function Home() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
