@@ -6,7 +6,7 @@ let client: ClickHouseClient | null = null;
 export function getClickHouseClient(): ClickHouseClient {
   if (!client) {
     client = createClient({
-      url: env.CLICKHOUSE_URL,
+      host: env.CLICKHOUSE_URL,
       username: env.CLICKHOUSE_USER,
       password: env.CLICKHOUSE_PASS,
       database: env.CLICKHOUSE_DB,

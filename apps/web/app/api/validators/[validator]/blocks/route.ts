@@ -35,7 +35,7 @@ export async function GET(
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     
     // Get total count for pagination
     const countResult = await client.query({
@@ -48,7 +48,7 @@ export async function GET(
       format: 'JSONEachRow',
     });
 
-    const countData = await countResult.json();
+    const countData = await countResult.json() as any[];
     const total = countData[0]?.total || 0;
 
     return NextResponse.json({

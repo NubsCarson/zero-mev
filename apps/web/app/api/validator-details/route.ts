@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as Array<any>;
     
     // Convert to detailed program info
     const programDetails = data.map((row: any) => {

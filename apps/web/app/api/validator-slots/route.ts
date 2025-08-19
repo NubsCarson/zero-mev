@@ -6,7 +6,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 async function fetchRecentSlotsFromRPC(validatorAddress: string) {
   console.log(`[RPC] Starting RPC fetch for validator: ${validatorAddress}`);
   
-  const rpcUrl = process.env.SOL_RPC || 'https://solana-mainnet.g.alchemy.com/v2/demo';
+  const rpcUrl = process.env.SOL_RPC || 'https://rpc.zeroblock.io';
   console.log(`[RPC] Using RPC URL: ${rpcUrl}`);
   
   const connection = new Connection(rpcUrl);
@@ -79,9 +79,10 @@ async function fetchRecentSlotsFromRPC(validatorAddress: string) {
             const message = tx.transaction.message;
             const accountKeys = message.staticAccountKeys || [];
             
-            // Process outer instructions
-            if (message.instructions) {
-              for (const instruction of message.instructions) {
+            // Process outer instructions - handle both legacy and versioned messages
+            const instructions = 'instructions' in message ? message.instructions : message.compiledInstructions || [];
+            if (instructions) {
+              for (const instruction of instructions) {
                 const programId = accountKeys[instruction.programIdIndex]?.toBase58();
                 if (programId) {
                   programCounts[programId] = (programCounts[programId] || 0) + 1;
@@ -179,7 +180,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const countData = await countResult.json();
+    const countData = await countResult.json() as Array<{ total: string }>;
     const total = parseInt(countData[0]?.total || '0');
     console.log(`[DB] Count query result:`, countData, `total parsed as:`, total);
 
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const slotsData = await slotsResult.json();
+    const slotsData = await slotsResult.json() as Array<any>;
 
     console.log(`[DB] Found ${slotsData.length} slots in database, total: ${total}, offset: ${offset}`);
 

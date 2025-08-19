@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching program stats:', error);

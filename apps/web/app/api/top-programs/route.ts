@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         query: `SELECT count() FROM ${env.CLICKHOUSE_DB}.program_blacklist FINAL WHERE reason != ''`,
         format: 'JSONEachRow',
       });
-      const blacklistData = await blacklistCheck.json();
+      const blacklistData = await blacklistCheck.json() as Array<{ 'count()': number }>;
       const hasBlacklist = blacklistData[0]?.['count()'] > 0;
       
       if (hasBlacklist) {
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching top programs:', error);

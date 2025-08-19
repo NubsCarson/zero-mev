@@ -25,7 +25,7 @@ export async function GET() {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching current blocks:', error);

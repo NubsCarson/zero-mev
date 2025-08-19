@@ -55,7 +55,7 @@ export async function GET(
       format: 'JSONEachRow',
     });
 
-    const programsData = await programsResult.json();
+    const programsData = await programsResult.json() as any[];
 
     return NextResponse.json({
       block: blockData[0],

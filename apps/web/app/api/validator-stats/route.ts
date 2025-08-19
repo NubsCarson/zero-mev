@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       format: 'JSONEachRow',
     });
 
-    const validatorStatsData = await validatorStatsResult.json();
+    const validatorStatsData = await validatorStatsResult.json() as Array<any>;
     console.log('📊 Found', validatorStatsData.length, 'validators');
 
     // For each validator, get their top programs
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
           format: 'JSONEachRow',
         });
 
-        const topProgramsData = await topProgramsResult.json();
+        const topProgramsData = await topProgramsResult.json() as Array<any>;
         
         const top_programs = topProgramsData.map((program: any) => {
           const { programInfo } = formatProgramDisplay(program.program_id);

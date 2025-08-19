@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
             format: 'JSONEachRow',
           });
           
-          const data = await result.json();
+          const data = await result.json() as any[];
           
           const sseData = `data: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(sseData));

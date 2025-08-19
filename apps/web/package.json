@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.95.2",
     "db": "workspace:*",
     "lucide-react": "^0.540.0",
     "next": "14.2.5",
