@@ -25,7 +25,10 @@ class SolanaIngester {
     logger.info('Starting Solana ingestion worker...');
     
     try {
-      await this.backfill();
+      // Skip backfill - go straight to real-time
+      logger.info('Skipping backfill, starting real-time processing...');
+      const currentSlot = await this.connection.getSlot(env.INGEST_COMMITMENT as Commitment);
+      this.lastProcessedSlot = currentSlot;
       await this.startRealtime();
     } catch (error) {
       logger.error('Fatal error in ingester:', error);
