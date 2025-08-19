@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { ProgramBadge } from '@/components/ProgramTag';
 import { formatProgramDisplay } from '@/lib/programRegistry';
+import HeaderNav from '@/components/HeaderNav';
 
 interface BlacklistEntry {
   program_id: string;
@@ -136,36 +137,42 @@ export default function Blacklist() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Program Blacklist</h1>
-          {isLive && lastUpdate && connectionStatus === 'connected' && (
-            <div className="flex items-center gap-2 text-green-400 text-sm mt-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              Real-time SSE stream active • Last updated: {lastUpdate.toLocaleTimeString()}
-            </div>
-          )}
-          {isLive && connectionStatus === 'connecting' && (
-            <div className="flex items-center gap-2 text-yellow-400 text-sm mt-2">
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin"></div>
-              Connecting to real-time stream...
-            </div>
-          )}
-          {isLive && connectionStatus === 'disconnected' && (
-            <div className="flex items-center gap-2 text-red-400 text-sm mt-2">
-              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-              Stream disconnected • Reconnecting...
-            </div>
-          )}
-        </div>
-        <div className="flex gap-3">
+    <div className="min-h-screen bg-background">
+      {/* Header Navigation */}
+      <HeaderNav 
+        title="Program Blacklist"
+        subtitle="Manage blocked programs and real-time monitoring"
+      />
+      
+      <div className="container mx-auto p-6 max-w-5xl">
+        {/* Live Stream Status and Controls */}
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            {isLive && lastUpdate && connectionStatus === 'connected' && (
+              <div className="flex items-center gap-2 text-success text-sm">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                Real-time updates active • Last: {lastUpdate.toLocaleTimeString()}
+              </div>
+            )}
+            {isLive && connectionStatus === 'connecting' && (
+              <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin"></div>
+                Connecting to real-time stream...
+              </div>
+            )}
+            {isLive && connectionStatus === 'disconnected' && (
+              <div className="flex items-center gap-2 text-destructive text-sm">
+                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                Stream disconnected • Reconnecting...
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setIsLive(!isLive)}
-            className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${
               isLive 
-                ? 'bg-green-600 hover:bg-green-700 text-white' 
-                : 'bg-secondary hover:bg-secondary/90 text-foreground'
+                ? 'bg-success hover:bg-success/90 text-white' 
+                : 'bg-secondary hover:bg-secondary/90 text-secondary-foreground'
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${
@@ -175,25 +182,18 @@ export default function Blacklist() {
                   : connectionStatus === 'connecting'
                   ? 'bg-yellow-300 animate-spin'
                   : 'bg-red-300'
-                : 'bg-gray-400'
+                : 'bg-muted-foreground'
             }`}></div>
             {isLive 
               ? connectionStatus === 'connected' 
-                ? 'Live Stream' 
+                ? 'Live Updates' 
                 : connectionStatus === 'connecting'
                 ? 'Connecting...'
                 : 'Stream Error'
-              : 'Static Mode'
+              : 'Enable Live Updates'
             }
           </button>
-          <a
-            href="/"
-            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-          >
-            Back to Dashboard
-          </a>
         </div>
-      </div>
 
       <form onSubmit={handleAdd} className="bg-card border border-border p-6 rounded-lg mb-8">
         <h2 className="text-xl font-semibold mb-4">Add to Blacklist</h2>
@@ -236,9 +236,9 @@ export default function Blacklist() {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-xl font-semibold">Current Blacklist</h2>
-          {isLive && connectionStatus === 'connected' && (
-            <span className="text-xs text-green-400">Real-time SSE stream</span>
-          )}
+          <span className="text-xs text-muted-foreground">
+            {entries.length} {entries.length === 1 ? 'program' : 'programs'} blocked
+          </span>
         </div>
         {loading ? (
           <div className="p-8 text-center text-muted-foreground">Loading...</div>
@@ -282,6 +282,7 @@ export default function Blacklist() {
             </tbody>
           </table>
         )}
+      </div>
       </div>
     </div>
   );
