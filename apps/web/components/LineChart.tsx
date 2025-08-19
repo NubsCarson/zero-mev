@@ -20,7 +20,7 @@ export default function LineChart({ data, width = 800, height = 400 }: LineChart
     );
   }
 
-  const padding = { top: 20, right: 20, bottom: 60, left: 80 };
+  const padding = { top: 20, right: 30, bottom: 60, left: 80 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
@@ -42,8 +42,9 @@ export default function LineChart({ data, width = 800, height = 400 }: LineChart
   );
 
   return (
-    <svg width={width} height={height} className="bg-gray-800 rounded">
-      <g transform={`translate(${padding.left}, ${padding.top})`}>
+    <div className="w-full overflow-hidden">
+      <svg width={width} height={height} className="bg-card rounded border border-border" viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: '100%', height: 'auto' }}>
+        <g transform={`translate(${padding.left}, ${padding.top})`}>
         {/* Y-axis */}
         <line
           x1={0}
@@ -129,6 +130,7 @@ export default function LineChart({ data, width = 800, height = 400 }: LineChart
           />
         ))}
       </g>
-    </svg>
+      </svg>
+    </div>
   );
 }

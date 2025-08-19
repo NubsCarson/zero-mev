@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { TrendingUp } from 'lucide-react';
 
 interface ValidatorStats {
   validator: string;
@@ -121,8 +122,8 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
   return (
     <div className="space-y-6">
       {/* Validator Search */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h2 className="text-xl font-semibold mb-4">🔍 Validator Explorer</h2>
+      <div className="bg-card rounded-lg p-6 border border-border">
+        <h2 className="text-xl font-semibold mb-4">Validator Explorer</h2>
         
         <form onSubmit={handleValidatorSearch} className="flex gap-3 mb-6">
           <input
@@ -130,12 +131,12 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
             value={searchValidator}
             onChange={(e) => setSearchValidator(e.target.value)}
             placeholder="Enter validator public key"
-            className="flex-1 px-4 py-3 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-sm"
+            className="flex-1 px-4 py-3 bg-muted rounded-lg border border-border focus:border-ring focus:outline-none font-mono text-sm"
           />
           <button
             type="submit"
             disabled={blocksLoading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Search
           </button>
@@ -143,29 +144,32 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
 
         {/* Top Validators */}
         <div>
-          <h3 className="text-lg font-semibold mb-3">📈 Top Validators</h3>
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Top Validators
+          </h3>
           
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-gray-400">Loading validators...</p>
+              <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+              <p className="text-muted-foreground">Loading validators...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto">
-              {validators.slice(0, 12).map((validator) => (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {validators.slice(0, 25).map((validator) => (
                 <div
                   key={validator.validator}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors hover:bg-gray-700/50 ${
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors hover:bg-muted/50 ${
                     selectedValidator === validator.validator 
-                      ? 'border-blue-500 bg-blue-900/20' 
-                      : 'border-gray-600'
+                      ? 'border-primary bg-primary/20' 
+                      : 'border-border'
                   }`}
                   onClick={() => handleValidatorSelect(validator.validator)}
                 >
-                  <div className="text-sm font-mono text-blue-400 mb-1">
+                  <div className="text-sm font-mono text-primary mb-1">
                     {formatValidator(validator.validator)}
                   </div>
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     {validator.blocks_processed.toLocaleString()} blocks
                   </div>
                 </div>
@@ -177,23 +181,23 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
 
       {/* Validator Blocks */}
       {selectedValidator && (
-        <div className="bg-gray-800 rounded-lg p-6">
+        <div className="bg-card rounded-lg p-6 border border-border">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">🧱 Blocks by Validator</h3>
-            <div className="text-sm text-gray-400 font-mono">
+            <h3 className="text-lg font-semibold">Blocks by Validator</h3>
+            <div className="text-sm text-muted-foreground font-mono">
               {formatValidator(selectedValidator)}
             </div>
           </div>
 
           {blocksLoading ? (
             <div className="text-center py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-gray-400">Loading blocks...</p>
+              <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+              <p className="text-muted-foreground">Loading blocks...</p>
             </div>
           ) : validatorBlocks ? (
             <div className="space-y-4">
               {/* Pagination Info */}
-              <div className="text-sm text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 Showing {validatorBlocks.pagination.offset + 1}-{Math.min(
                   validatorBlocks.pagination.offset + validatorBlocks.pagination.limit,
                   validatorBlocks.pagination.total
@@ -205,39 +209,39 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
                 {validatorBlocks.blocks.map((block) => (
                   <div
                     key={block.slot}
-                    className="p-4 bg-gray-700/50 rounded-lg border border-gray-600 cursor-pointer hover:bg-gray-700 transition-colors"
+                    className="p-4 bg-muted/50 rounded-lg border border-border cursor-pointer hover:bg-muted transition-colors"
                     onClick={() => onBlockClick?.(block.slot)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="text-lg font-mono font-bold text-blue-400">
+                        <div className="text-lg font-mono font-bold text-primary">
                           #{block.slot.toLocaleString()}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                           {formatTimeAgo(block.block_time)}
                         </div>
                       </div>
                       
                       <div className="flex items-center gap-6 text-sm">
                         <div className="text-center">
-                          <div className="text-green-400 font-semibold">
+                          <div className="text-success font-semibold">
                             {block.total_invocations.toLocaleString()}
                           </div>
-                          <div className="text-gray-500 text-xs">invocations</div>
+                          <div className="text-muted-foreground text-xs">invocations</div>
                         </div>
                         
                         <div className="text-center">
-                          <div className="text-blue-400 font-semibold">
+                          <div className="text-primary font-semibold">
                             {block.unique_programs}
                           </div>
-                          <div className="text-gray-500 text-xs">programs</div>
+                          <div className="text-muted-foreground text-xs">programs</div>
                         </div>
                         
                         <div className="text-center">
-                          <div className="text-purple-400 font-semibold">
+                          <div className="text-accent-foreground font-semibold">
                             {block.unique_transactions.toLocaleString()}
                           </div>
-                          <div className="text-gray-500 text-xs">transactions</div>
+                          <div className="text-muted-foreground text-xs">transactions</div>
                         </div>
                       </div>
                     </div>
@@ -250,26 +254,26 @@ export default function ValidatorExplorer({ onBlockClick }: ValidatorExplorerPro
                 <button
                   onClick={() => fetchValidatorBlocks(selectedValidator, currentPage - 1)}
                   disabled={currentPage === 0}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Previous
                 </button>
                 
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   Page {currentPage + 1} of {Math.ceil(validatorBlocks.pagination.total / pageSize)}
                 </span>
                 
                 <button
                   onClick={() => fetchValidatorBlocks(selectedValidator, currentPage + 1)}
                   disabled={!validatorBlocks.pagination.hasMore}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Next
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               No blocks found for this validator
             </div>
           )}

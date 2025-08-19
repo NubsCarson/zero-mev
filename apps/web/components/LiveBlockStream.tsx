@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Hammer, HelpCircle, BarChart3 } from 'lucide-react';
 import { formatProgramDisplay } from '@/lib/programRegistry';
 
 interface Block {
@@ -12,12 +13,25 @@ interface Block {
   unique_transactions?: number;
 }
 
+interface BlockProgramStats {
+  program_id: string;
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+  bgColor: string;
+}
+
+interface BlockWithPrograms extends Block {
+  programStats?: BlockProgramStats[];
+}
+
 interface LiveBlockStreamProps {
   onBlockClick?: (slot: number) => void;
 }
 
 export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) {
-  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [blocks, setBlocks] = useState<BlockWithPrograms[]>([]);
   const [isLive, setIsLive] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [fallbackMode, setFallbackMode] = useState(false);
@@ -26,12 +40,24 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     try {
       const response = await fetch('/api/blocks/current');
       if (response.ok) {
-        const data = await response.json();
-        // Debug: log the first block's timestamp in fallback mode
-        if (data.length > 0) {
-          console.log('Fallback - First block timestamp:', data[0].block_time, 'parsed as:', new Date(data[0].block_time));
-        }
-        setBlocks(data);
+        const blocksData: Block[] = await response.json();
+        
+        // Fetch program stats for the first 5 blocks for better coverage
+        const blocksWithPrograms = await Promise.all(
+          blocksData.slice(0, 5).map(async (block, index) => {
+            // Add delay between API calls to prevent spam
+            if (index > 0) {
+              await new Promise(resolve => setTimeout(resolve, 80));
+            }
+            const programStats = await fetchBlockProgramStats(block.slot);
+            return { ...block, programStats };
+          })
+        );
+        
+        // Add remaining blocks without program stats
+        const remainingBlocks = blocksData.slice(5).map(block => ({ ...block, programStats: undefined }));
+        
+        setBlocks([...blocksWithPrograms, ...remainingBlocks]);
         if (fallbackMode) {
           setConnectionStatus('connected');
         }
@@ -39,6 +65,17 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
     } catch (error) {
       console.error('Error fetching latest blocks:', error);
       setConnectionStatus('disconnected');
+    }
+  };
+
+  const fetchBlockProgramStats = async (slot: number): Promise<BlockProgramStats[]> => {
+    try {
+      const response = await fetch(`/api/blocks/${slot}/programs`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching block program stats:', error);
+      return [];
     }
   };
 
@@ -74,11 +111,26 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
             return;
           }
           if (Array.isArray(data)) {
-            // Debug: log the first block's timestamp
-            if (data.length > 0) {
-              console.log('First block timestamp:', data[0].block_time, 'parsed as:', new Date(data[0].block_time));
-            }
-            setBlocks(data);
+            // Process blocks with throttling to reduce API spam
+            const processBlocks = async () => {
+              // Fetch program stats for the first 5 blocks from SSE for better coverage
+              const blocksWithPrograms = await Promise.all(
+                data.slice(0, 5).map(async (block: Block, index) => {
+                  // Add delay between API calls
+                  if (index > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  }
+                  const programStats = await fetchBlockProgramStats(block.slot);
+                  return { ...block, programStats };
+                })
+              );
+              
+              // Add remaining blocks without program stats
+              const remainingBlocks = data.slice(5).map(block => ({ ...block, programStats: undefined }));
+              
+              setBlocks([...blocksWithPrograms, ...remainingBlocks]);
+            };
+            processBlocks();
           }
         } catch (error) {
           console.error('Error parsing SSE data:', error);
@@ -113,15 +165,22 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date();
     
-    // Parse the timestamp - should now be in ISO format from ClickHouse
+    // Parse the timestamp - ClickHouse returns timestamps in format "YYYY-MM-DD HH:MM:SS"
     let blockTime: Date;
     try {
-      blockTime = new Date(timestamp);
-      
-      // If the parsed date is invalid, try alternative formats
-      if (isNaN(blockTime.getTime())) {
-        // Try with 'Z' suffix if not present
-        blockTime = new Date(timestamp.includes('Z') ? timestamp : timestamp + 'Z');
+      // Handle ClickHouse timestamp format: "2025-08-18 23:17:32"
+      if (timestamp.includes(' ') && !timestamp.includes('T')) {
+        // Convert ClickHouse format to ISO format (ClickHouse returns UTC timestamps)
+        const isoTimestamp = timestamp.replace(' ', 'T') + 'Z';
+        blockTime = new Date(isoTimestamp);
+      } else {
+        // Handle ISO format timestamps
+        blockTime = new Date(timestamp);
+        
+        // If the parsed date is invalid, try with 'Z' suffix if not present
+        if (isNaN(blockTime.getTime())) {
+          blockTime = new Date(timestamp.includes('Z') ? timestamp : timestamp + 'Z');
+        }
       }
       
       // If still invalid, log and show raw timestamp
@@ -142,6 +201,7 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
       return 'just now';
     }
     
+    if (diffSeconds < 5) return 'just now';
     if (diffSeconds < 60) return `${diffSeconds}s ago`;
     if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
     if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
@@ -149,12 +209,23 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
   };
 
   const formatValidator = (validator: string) => {
-    if (validator === 'unknown') return '❓ Unknown';
-    return `🏗️ ${validator.slice(0, 8)}...${validator.slice(-8)}`;
+    if (validator === 'unknown') return (
+      <span className="flex items-center gap-1">
+        <HelpCircle className="w-3 h-3" />
+        Unknown
+      </span>
+    );
+    return (
+      <span className="flex items-center gap-1">
+        <Hammer className="w-3 h-3" />
+        {validator.slice(0, 8)}...{validator.slice(-8)}
+      </span>
+    );
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-6 min-h-[800px]">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${
@@ -183,35 +254,37 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
           onClick={() => setIsLive(!isLive)}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             isLive 
-              ? 'bg-red-600 hover:bg-red-700 text-white' 
-              : 'bg-green-600 hover:bg-green-700 text-white'
+              ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground' 
+              : 'bg-success hover:bg-success/90 text-white'
           }`}
         >
           {isLive ? 'Pause' : 'Resume'}
         </button>
       </div>
 
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+      {/* Main Content */}
+      <div className="h-[700px]">
+        <div className="space-y-2 h-full overflow-y-auto">
         {blocks.map((block, index) => (
           <div
             key={block.slot}
-            className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:bg-gray-700/50 ${
+            className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:bg-muted/50 ${
               index === 0 && isLive 
-                ? 'border-green-500/50 bg-green-900/20' 
-                : 'border-gray-600 bg-gray-700/30'
+                ? 'border-success/50 bg-success/10' 
+                : 'border-border bg-muted/30'
             }`}
             onClick={() => onBlockClick?.(block.slot)}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="text-lg font-mono font-bold text-blue-400">
+                <div className="text-lg font-mono font-bold text-primary">
                   #{block.slot.toLocaleString()}
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   {formatTimeAgo(block.block_time)}
                 </div>
                 {index === 0 && isLive && (
-                  <span className="px-2 py-1 bg-green-600 text-white text-xs rounded-full">
+                  <span className="px-2 py-1 bg-success text-white text-xs rounded-full">
                     Latest
                   </span>
                 )}
@@ -219,34 +292,62 @@ export default function LiveBlockStream({ onBlockClick }: LiveBlockStreamProps) 
               
               <div className="flex items-center gap-4 text-sm">
                 <div className="text-center">
-                  <div className="text-green-400 font-semibold">
+                  <div className="text-success font-semibold">
                     {block.total_invocations.toLocaleString()}
                   </div>
-                  <div className="text-gray-500 text-xs">invocations</div>
+                  <div className="text-muted-foreground text-xs">invocations</div>
                 </div>
                 
                 <div className="text-center">
-                  <div className="text-blue-400 font-semibold">
+                  <div className="text-primary font-semibold">
                     {block.unique_programs}
                   </div>
-                  <div className="text-gray-500 text-xs">programs</div>
+                  <div className="text-muted-foreground text-xs">programs</div>
                 </div>
               </div>
             </div>
             
-            <div className="mt-2 text-xs text-gray-400">
+            <div className="mt-2 text-xs text-muted-foreground">
               {formatValidator(block.validator)}
             </div>
+            
+            {/* Program Breakdown */}
+            {block.programStats && block.programStats.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="text-xs text-muted-foreground mb-2">Top Programs:</div>
+                <div className="flex flex-wrap gap-2">
+                  {block.programStats.slice(0, 6).map((program) => (
+                    <div
+                      key={program.program_id}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${program.bgColor} border border-opacity-50`}
+                    >
+                      <span className={`${program.color} font-medium`}>
+                        {program.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {program.percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+                  {block.programStats.length > 6 && (
+                    <div className="px-2 py-1 bg-muted rounded-full text-xs text-muted-foreground">
+                      +{block.programStats.length - 6} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
-      </div>
-      
-      {blocks.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          Loading blocks...
+        
+        {blocks.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+            Loading blocks...
+          </div>
+        )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

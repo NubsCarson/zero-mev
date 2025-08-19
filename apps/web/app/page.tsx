@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Star, BarChart3, Clock, TrendingUp, X } from 'lucide-react';
 import LineChart from '@/components/LineChart';
 import ProgramTag from '@/components/ProgramTag';
 import CategoryLegend from '@/components/CategoryLegend';
@@ -201,9 +202,17 @@ export default function Home() {
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
-      <h1 className="text-3xl font-bold mb-8">Solana Program Tracker</h1>
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-4">Solana Program Tracker</h1>
+        <p className="text-muted-foreground">Real-time blockchain monitoring and program analysis</p>
+      </div>
+
+      {/* Program Categories Dropdown - Moved to top */}
+      <div className="mb-6">
+        <CategoryLegend isDropdown={true} />
+      </div>
       
-      <form onSubmit={handleSubmit} className="bg-gray-800 p-6 rounded-lg mb-8">
+      <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg mb-8 border border-border shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium mb-2">From Date</label>
@@ -211,7 +220,7 @@ export default function Home() {
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
             />
           </div>
           
@@ -221,7 +230,7 @@ export default function Home() {
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
             />
           </div>
           
@@ -232,7 +241,7 @@ export default function Home() {
               value={validator}
               onChange={(e) => setValidator(e.target.value)}
               placeholder="all or validator pubkey"
-              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
             />
           </div>
           
@@ -252,17 +261,17 @@ export default function Home() {
         <div className="flex gap-4">
           <button
             type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            className="px-6 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
           >
             Search
           </button>
           <button
             type="button"
             onClick={toggleLiveMode}
-            className={`px-6 py-2 rounded transition-colors flex items-center gap-2 ${
+            className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
               isLiveMode 
-                ? 'bg-green-600 hover:bg-green-700 text-white' 
-                : 'bg-gray-600 hover:bg-gray-700 text-white'
+                ? 'bg-success hover:bg-success/90 text-white' 
+                : 'bg-secondary hover:bg-secondary/90 text-secondary-foreground'
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${
@@ -272,7 +281,7 @@ export default function Home() {
                   : connectionStatus === 'connecting'
                   ? 'bg-yellow-300 animate-spin'
                   : 'bg-red-300'
-                : 'bg-gray-400'
+                : 'bg-muted-foreground'
             }`}></div>
             {isLiveMode 
               ? connectionStatus === 'connected' 
@@ -285,13 +294,14 @@ export default function Home() {
           </button>
           <a
             href="/explorer"
-            className="px-6 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors inline-block text-center"
+            className="px-8 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground rounded-lg hover:from-primary/90 hover:to-accent/90 transition-all duration-200 inline-block text-center flex items-center gap-3 shadow-lg hover:shadow-xl transform hover:scale-105 border border-primary/50"
           >
-            🌟 Block Explorer
+            <Star className="w-5 h-5" />
+            <span className="font-semibold text-lg">Block Explorer</span>
           </a>
           <a
             href="/blacklist"
-            className="px-6 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors inline-block text-center"
+            className="px-6 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/90 transition-colors flex items-center justify-center border border-border"
           >
             Manage Blacklist
           </a>
@@ -300,7 +310,7 @@ export default function Home() {
 
       {isLiveMode && lastUpdate && connectionStatus === 'connected' && (
         <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
-          <div className="flex items-center gap-2 text-green-300 text-sm">
+          <div className="flex items-center gap-2 text-success text-sm">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             Real-time SSE stream active • Last updated: {lastUpdate.toLocaleTimeString()}
           </div>
@@ -329,29 +339,26 @@ export default function Home() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Top Programs</h2>
-            {isLiveMode && connectionStatus === 'connected' && (
-              <span className="text-xs text-green-400">Real-time SSE stream</span>
-            )}
           </div>
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
+          <div className="bg-card rounded-lg overflow-hidden border border-border">
             {loading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
+              <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : programs.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No programs found</div>
+              <div className="p-8 text-center text-muted-foreground">No programs found</div>
             ) : (
               <table className="w-full">
-                <thead className="bg-gray-700">
+                <thead className="bg-muted">
                   <tr>
                     <th className="px-4 py-3 text-left">Program</th>
                     <th className="px-4 py-3 text-right">Invocations</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {programs.map((program, i) => (
+                  {programs.map((program) => (
                     <tr
                       key={program.program_id}
-                      className={`border-t border-gray-700 hover:bg-gray-700/50 cursor-pointer transition-colors ${
-                        selectedProgram === program.program_id ? 'bg-gray-700' : ''
+                      className={`border-t border-border hover:bg-muted/50 cursor-pointer transition-colors ${
+                        selectedProgram === program.program_id ? 'bg-muted' : ''
                       }`}
                       onClick={() => handleProgramClick(program.program_id)}
                     >
@@ -379,34 +386,35 @@ export default function Home() {
             </h2>
             <div className="flex items-center gap-3">
               {selectedProgram && isLiveMode && connectionStatus === 'connected' && (
-                <span className="text-xs text-green-400">Real-time SSE stream</span>
+                <span className="text-xs text-muted-foreground">Live</span>
               )}
               {selectedProgram && (
                 <button
                   onClick={() => setSelectedProgram(null)}
-                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm transition-colors flex items-center gap-1"
+                  className="px-3 py-1 bg-muted hover:bg-secondary text-foreground rounded text-sm transition-colors flex items-center gap-1"
                 >
-                  ✕ Close
+                  <X className="w-3 h-3" />
+                  Close
                 </button>
               )}
             </div>
           </div>
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
+          <div className="bg-card rounded-lg overflow-hidden border border-border">
             {!selectedProgram ? (
-              <div className="text-center text-gray-500 py-12">
-                <div className="text-4xl mb-4">📊</div>
+              <div className="text-center text-muted-foreground py-12">
+                <BarChart3 className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                 <div className="text-lg mb-2">Program Timeline</div>
                 <div className="text-sm">Click on a program to view its activity timeline</div>
               </div>
             ) : statsLoading ? (
-              <div className="text-center text-gray-500 py-12">
-                <div className="text-4xl mb-4">⏳</div>
+              <div className="text-center text-muted-foreground py-12">
+                <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-spin" />
                 <div className="text-lg">Loading timeline...</div>
               </div>
             ) : (
               <div>
                 {/* Header with program info and stats */}
-                <div className="bg-gray-700 p-4 border-b border-gray-600">
+                <div className="bg-muted p-4 border-b border-border">
                   <div className="flex items-center justify-between mb-3">
                     <ProgramTag 
                       programId={selectedProgram}
@@ -415,24 +423,34 @@ export default function Home() {
                   </div>
                   
                   {/* Quick stats */}
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-400">
-                        {programStats.reduce((sum, stat) => sum + (stat.cnt || 0), 0).toLocaleString()}
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="text-center min-w-0">
+                      <div className="text-lg font-bold text-primary truncate">
+                        {(() => {
+                          const total = programStats.reduce((sum, stat) => sum + (stat.cnt || 0), 0);
+                          if (total >= 1000000) return `${(total / 1000000).toFixed(1)}M`;
+                          if (total >= 1000) return `${(total / 1000).toFixed(1)}K`;
+                          return total.toLocaleString();
+                        })()}
                       </div>
-                      <div className="text-gray-400">Total Invocations</div>
+                      <div className="text-muted-foreground text-xs">Total Invocations</div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-400">
+                    <div className="text-center min-w-0">
+                      <div className="text-lg font-bold text-success truncate">
                         {programStats.length}
                       </div>
-                      <div className="text-gray-400">Data Points</div>
+                      <div className="text-muted-foreground text-xs">Data Points</div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-purple-400">
-                        {programStats.length > 0 ? Math.max(...programStats.map(s => s.cnt || 0)).toLocaleString() : '0'}
+                    <div className="text-center min-w-0">
+                      <div className="text-lg font-bold text-white truncate">
+                        {(() => {
+                          const peak = programStats.length > 0 ? Math.max(...programStats.map(s => s.cnt || 0)) : 0;
+                          if (peak >= 1000000) return `${(peak / 1000000).toFixed(1)}M`;
+                          if (peak >= 1000) return `${(peak / 1000).toFixed(1)}K`;
+                          return peak.toLocaleString();
+                        })()}
                       </div>
-                      <div className="text-gray-400">Peak Hour</div>
+                      <div className="text-foreground text-xs">Peak Hour</div>
                     </div>
                   </div>
                 </div>
@@ -440,30 +458,32 @@ export default function Home() {
                 {/* Chart section */}
                 <div className="p-4">
                   {programStats.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      <div className="text-3xl mb-3">📈</div>
+                    <div className="text-center text-muted-foreground py-8">
+                      <TrendingUp className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
                       <div className="text-lg mb-2">No Data Available</div>
                       <div className="text-sm">No activity found for this program in the selected time range</div>
                     </div>
                   ) : (
                     <div>
                       <div className="mb-4">
-                        <h3 className="text-sm font-medium text-gray-400 mb-2">Activity Timeline</h3>
-                        <div className="text-xs text-gray-500">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Activity Timeline</h3>
+                        <div className="text-xs text-muted-foreground">
                           Showing activity from {new Date(programStats[0]?.ts).toLocaleDateString()} to {new Date(programStats[programStats.length - 1]?.ts).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="bg-gray-900 rounded-lg p-4">
-                        <LineChart data={programStats} width={700} height={300} />
+                      <div className="bg-secondary rounded-lg p-4 overflow-hidden">
+                        <div className="w-full max-w-full">
+                          <LineChart data={programStats} width={650} height={300} />
+                        </div>
                       </div>
                       
                       {/* Recent activity table */}
                       {programStats.length > 0 && (
                         <div className="mt-6">
-                          <h3 className="text-sm font-medium text-gray-400 mb-3">Recent Activity</h3>
-                          <div className="bg-gray-900 rounded-lg overflow-hidden">
+                          <h3 className="text-sm font-medium text-muted-foreground mb-3">Recent Activity</h3>
+                          <div className="bg-secondary rounded-lg overflow-hidden">
                             <table className="w-full text-sm">
-                              <thead className="bg-gray-800">
+                              <thead className="bg-muted">
                                 <tr>
                                   <th className="px-4 py-2 text-left">Time</th>
                                   <th className="px-4 py-2 text-right">Invocations</th>
@@ -475,22 +495,22 @@ export default function Home() {
                                   const maxCnt = Math.max(...programStats.map(s => s.cnt || 0));
                                   const percentage = maxCnt > 0 ? ((stat.cnt || 0) / maxCnt * 100) : 0;
                                   return (
-                                    <tr key={i} className="border-t border-gray-800">
-                                      <td className="px-4 py-2 text-gray-300">
+                                    <tr key={i} className="border-t border-border">
+                                      <td className="px-4 py-2 text-foreground">
                                         {new Date(stat.ts).toLocaleString()}
                                       </td>
-                                      <td className="px-4 py-2 text-right font-mono text-blue-400">
+                                      <td className="px-4 py-2 text-right font-mono text-primary">
                                         {(stat.cnt || 0).toLocaleString()}
                                       </td>
                                       <td className="px-4 py-2 text-right">
                                         <div className="flex items-center justify-end gap-2">
-                                          <div className="w-16 bg-gray-700 rounded-full h-2">
+                                          <div className="w-16 bg-muted rounded-full h-2">
                                             <div 
                                               className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
                                               style={{ width: `${percentage}%` }}
                                             />
                                           </div>
-                                          <span className="text-xs text-gray-400 w-8">
+                                          <span className="text-xs text-muted-foreground w-8">
                                             {percentage.toFixed(0)}%
                                           </span>
                                         </div>
@@ -509,10 +529,6 @@ export default function Home() {
               </div>
             )}
           </div>
-        </div>
-        
-        <div className="mt-8">
-          <CategoryLegend />
         </div>
       </div>
     </div>

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
           const query = `
             SELECT 
               slot,
-              formatDateTime(block_time, '%Y-%m-%dT%H:%M:%SZ', 'UTC') as block_time,
+              toString(block_time) as block_time,
               validator,
               count() as total_invocations,
               countDistinct(program_id) as unique_programs,
@@ -34,7 +34,6 @@ export async function GET(request: NextRequest) {
           });
           
           const data = await result.json();
-          console.log(`📊 SSE blocks: sending ${data.length} blocks`);
           
           const sseData = `data: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(sseData));

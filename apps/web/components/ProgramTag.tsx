@@ -31,7 +31,7 @@ export default function ProgramTag({ programId, onClick, showFullId = false, cla
         </div>
         
         {/* Program ID */}
-        <div className="text-xs text-gray-400 font-mono">
+        <div className="text-xs text-muted-foreground font-mono">
           {showFullId ? programId : shortId}
         </div>
       </div>

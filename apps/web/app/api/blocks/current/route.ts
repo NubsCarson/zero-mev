@@ -11,7 +11,7 @@ export async function GET() {
       query: `
         SELECT 
           slot,
-          formatDateTime(block_time, '%Y-%m-%dT%H:%M:%SZ', 'UTC') as block_time,
+          toString(block_time) as block_time,
           validator,
           count() as total_invocations,
           countDistinct(program_id) as unique_programs,

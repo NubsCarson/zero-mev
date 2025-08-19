@@ -9,18 +9,18 @@ export interface ProgramInfo {
   isKnown: boolean;
 }
 
-// Define categories and their colors
+// Define categories and their colors using distinct, visually appealing colors
 const categories = {
-  'DEX': { color: 'text-blue-200', bgColor: 'bg-blue-900/30', borderColor: 'border-blue-500/50' },
-  'AMM': { color: 'text-green-200', bgColor: 'bg-green-900/30', borderColor: 'border-green-500/50' },
-  'Perp': { color: 'text-red-200', bgColor: 'bg-red-900/30', borderColor: 'border-red-500/50' },
-  'Lending': { color: 'text-purple-200', bgColor: 'bg-purple-900/30', borderColor: 'border-purple-500/50' },
-  'Launchpad': { color: 'text-orange-200', bgColor: 'bg-orange-900/30', borderColor: 'border-orange-500/50' },
-  'Gaming': { color: 'text-pink-200', bgColor: 'bg-pink-900/30', borderColor: 'border-pink-500/50' },
-  'Infra': { color: 'text-cyan-200', bgColor: 'bg-cyan-900/30', borderColor: 'border-cyan-500/50' },
-  'Staking': { color: 'text-yellow-200', bgColor: 'bg-yellow-900/30', borderColor: 'border-yellow-500/50' },
-  'Other': { color: 'text-gray-200', bgColor: 'bg-gray-900/30', borderColor: 'border-gray-500/50' },
-  'System': { color: 'text-slate-200', bgColor: 'bg-slate-900/30', borderColor: 'border-slate-500/50' },
+  'DEX': { color: 'text-blue-400', bgColor: 'bg-blue-500/20', borderColor: 'border-blue-500/50' },
+  'AMM': { color: 'text-emerald-400', bgColor: 'bg-emerald-500/20', borderColor: 'border-emerald-500/50' },
+  'Perp': { color: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50' },
+  'Lending': { color: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50' },
+  'Launchpad': { color: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50' },
+  'Gaming': { color: 'text-pink-400', bgColor: 'bg-pink-500/20', borderColor: 'border-pink-500/50' },
+  'Infra': { color: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50' },
+  'Staking': { color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50' },
+  'Other': { color: 'text-gray-400', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50' },
+  'System': { color: 'text-slate-400', bgColor: 'bg-slate-500/20', borderColor: 'border-slate-500/50' },
 };
 
 // Categorize programs based on their names
