@@ -24,7 +24,7 @@ export async function GET() {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     console.log('📊 Backend: GET blacklist returned', data.length, 'entries:', data);
     return NextResponse.json(data);
   } catch (error) {
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
       query_params: { program_id },
       format: 'JSONEachRow',
     });
-    const beforeData = await beforeQuery.json();
+    const beforeData = await beforeQuery.json() as any[];
     console.log('📊 Backend: ALL entries for this program before deletion:', beforeData);
 
     // Instead of using ReplacingMergeTree deletion, let's use ALTER TABLE DELETE
@@ -132,17 +132,17 @@ export async function DELETE(request: NextRequest) {
       query_params: { program_id },
       format: 'JSONEachRow',
     });
-    const afterData = await afterQuery.json();
+    const afterData = await afterQuery.json() as any[];
     console.log('📊 Backend: Active blacklist entries after deletion:', afterData);
 
     console.log('🎉 Backend: DELETE operation completed successfully');
     return NextResponse.json({ 
       success: true, 
-      beforeCount: beforeData.filter(e => e.reason !== '').length, 
+      beforeCount: beforeData.filter((e: any) => e.reason !== '').length, 
       afterCount: afterData.length 
     });
   } catch (error) {
     console.error('💥 Backend: Error removing from blacklist:', error);
-    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }

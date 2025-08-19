@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ArrowUpDown, Hammer, HelpCircle, TrendingUp, Users, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ArrowUpDown, Hammer, HelpCircle, TrendingUp, Users, BarChart3, Search } from 'lucide-react';
 import ProgramTag from '@/components/ProgramTag';
 import HeaderNav from '@/components/HeaderNav';
 
@@ -28,6 +28,7 @@ type SortDirection = 'asc' | 'desc';
 export default function ValidatorsPage() {
   const [validators, setValidators] = useState<ValidatorStat[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showTop100, setShowTop100] = useState(false);
   const [sortField, setSortField] = useState<SortField>('total_invocations');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [from, setFrom] = useState<string>(() => {
@@ -43,6 +44,10 @@ export default function ValidatorsPage() {
   const [validatorsPerPage] = useState(10);
   const [selectedValidator, setSelectedValidator] = useState<string | null>(null);
   const [validatorDetails, setValidatorDetails] = useState<ValidatorProgram[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchedValidator, setSearchedValidator] = useState<ValidatorStat | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchDebounceTimer, setSearchDebounceTimer] = useState<NodeJS.Timeout | null>(null);
 
   const fetchValidatorStats = async () => {
     setLoading(true);
@@ -71,6 +76,58 @@ export default function ValidatorsPage() {
       setLoading(false);
     }
   };
+
+  const searchValidator = useCallback(async (validatorAddress: string) => {
+    if (!validatorAddress.trim()) {
+      setSearchedValidator(null);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      // First get details for the specific validator
+      const params = new URLSearchParams({
+        validator: validatorAddress,
+        from: `${from}T00:00:00Z`,
+        to: `${to}T23:59:59Z`,
+        excludeBlacklisted: excludeBlacklisted.toString(),
+      });
+      
+      const response = await fetch(`/api/validator-details?${params}`);
+      const data = await response.json();
+      
+      if (response.ok && Array.isArray(data) && data.length > 0) {
+        // Calculate total invocations and unique programs from the details
+        const totalInvocations = data.reduce((sum: number, p: any) => sum + p.invocations, 0);
+        const uniquePrograms = data.length;
+        
+        // Create a ValidatorStat object for the searched validator
+        const validatorStat: ValidatorStat = {
+          validator: validatorAddress,
+          total_invocations: totalInvocations,
+          unique_programs: uniquePrograms,
+          top_programs: data.slice(0, 5).map((p: any) => ({
+            program_id: p.program_id,
+            name: p.name,
+            invocations: p.invocations,
+            percentage: p.percentage,
+            category: p.category,
+            color: p.color,
+            bgColor: p.bgColor
+          }))
+        };
+        
+        setSearchedValidator(validatorStat);
+      } else {
+        setSearchedValidator(null);
+      }
+    } catch (error) {
+      console.error('Error searching validator:', error);
+      setSearchedValidator(null);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [from, to, excludeBlacklisted]);
 
   const fetchValidatorDetails = async (validatorId: string) => {
     try {
@@ -108,11 +165,37 @@ export default function ValidatorsPage() {
   };
 
   useEffect(() => {
-    fetchValidatorStats();
-  }, []);
+    // Debounce search
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+    
+    if (searchQuery.trim()) {
+      const timer = setTimeout(() => {
+        searchValidator(searchQuery.trim());
+      }, 500);
+      setSearchDebounceTimer(timer);
+    } else {
+      setSearchedValidator(null);
+    }
+    
+    return () => {
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+      }
+    };
+  }, [searchQuery, searchValidator]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Don't fetch top 100 on search submit, only search for specific validator
+    if (searchQuery.trim()) {
+      searchValidator(searchQuery.trim());
+    }
+  };
+
+  const handleLoadTop100 = () => {
+    setShowTop100(true);
     fetchValidatorStats();
   };
 
@@ -200,6 +283,26 @@ export default function ValidatorsPage() {
 
       {/* Search Form */}
       <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg mb-8 border border-border shadow-sm">
+        {/* Validator Search - Primary Feature */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2 text-primary">Search Validator by Address</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Enter validator address (e.g., ABC123def456...)" 
+              className="w-full pl-10 pr-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none"
+            />
+            {searchLoading && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+              </div>
+            )}
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium mb-2">From Date</label>
@@ -238,20 +341,148 @@ export default function ValidatorsPage() {
           <button
             type="submit"
             className="px-6 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+            disabled={!searchQuery.trim()}
           >
-            Search
+            Search Validator
           </button>
+          {!showTop100 && (
+            <button
+              type="button"
+              onClick={handleLoadTop100}
+              className="px-6 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 transition-colors"
+            >
+              Load Top 100 Validators
+            </button>
+          )}
         </div>
       </form>
 
-      {/* Results */}
+      {/* Search Results - Primary Display */}
+      {searchedValidator && (
+        <div className="bg-card rounded-lg border-2 border-primary/50 mb-8">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Validator Details
+            </h2>
+          </div>
+          <div className="p-4">
+            <div 
+              className={`p-4 hover:bg-muted/30 transition-colors cursor-pointer rounded ${
+                selectedValidator === searchedValidator.validator ? 'bg-primary/10 border-l-4 border-primary' : ''
+              }`}
+              onClick={() => handleValidatorClick(searchedValidator.validator)}
+            >
+              <div className="grid grid-cols-12 gap-4 items-start">
+                {/* Validator */}
+                <div className="col-span-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    {formatValidator(searchedValidator.validator)}
+                    {selectedValidator === searchedValidator.validator && (
+                      <span className="text-xs text-primary font-medium">
+                        ▼ Details
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Total Invocations */}
+                <div className="col-span-2 text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Invocations</div>
+                  <div className="font-semibold text-primary">
+                    {formatNumber(searchedValidator.total_invocations)}
+                  </div>
+                </div>
+
+                {/* Unique Programs */}
+                <div className="col-span-2 text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Programs</div>
+                  <div className="font-semibold text-success">
+                    {searchedValidator.unique_programs}
+                  </div>
+                </div>
+
+                {/* Top Programs */}
+                <div className="col-span-4">
+                  <div className="text-xs text-muted-foreground mb-2">Top Programs</div>
+                  <div className="space-y-2">
+                    {searchedValidator.top_programs.slice(0, 3).map((program) => (
+                      <div key={program.program_id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border ${program.color} ${program.bgColor} border-opacity-50`}>
+                            {program.name}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground ml-2">
+                          {formatNumber(program.invocations)} ({program.percentage.toFixed(1)}%)
+                        </div>
+                      </div>
+                    ))}
+                    {searchedValidator.top_programs.length > 3 && (
+                      <div className="text-xs text-muted-foreground">
+                        +{searchedValidator.top_programs.length - 3} more programs
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Detailed View - Show when validator is selected */}
+              {selectedValidator === searchedValidator.validator && validatorDetails.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border bg-muted/20 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    All DeFi Programs Used by This Validator
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {validatorDetails.map((program) => (
+                      <div
+                        key={program.program_id}
+                        className={`p-3 rounded-lg border ${program.bgColor} border-opacity-50 bg-opacity-50`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-sm font-medium ${program.color}`}>
+                            {program.name}
+                          </span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${program.bgColor} ${program.color}`}>
+                            {program.category}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">
+                            {formatNumber(program.invocations)} calls
+                          </span>
+                          <span className="text-xs font-bold text-foreground">
+                            {program.percentage.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="mt-2">
+                          <div className="w-full bg-muted rounded-full h-1.5">
+                            <div 
+                              className={`h-1.5 rounded-full ${program.bgColor} opacity-80`}
+                              style={{ width: `${Math.min(program.percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top 100 Validators - Only show when requested */}
+      {showTop100 && (
       <div className="bg-card rounded-lg border border-border">
         {/* Header with stats */}
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Validator Rankings
+              Top 100 Validator Rankings
             </h2>
             {validators.length > 0 && (
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -508,6 +739,7 @@ export default function ValidatorsPage() {
           </>
         )}
       </div>
+      )}
       </div>
     </div>
   );

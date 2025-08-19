@@ -32,7 +32,7 @@ export async function GET(
       format: 'JSONEachRow',
     });
 
-    const blockData = await blockResult.json();
+    const blockData = await blockResult.json() as any[];
     
     if (blockData.length === 0) {
       return NextResponse.json({ error: 'Block not found' }, { status: 404 });

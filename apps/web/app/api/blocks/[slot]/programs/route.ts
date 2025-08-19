@@ -78,7 +78,7 @@ export async function GET(
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     let totalInvocations = 0;
 
     // Calculate total invocations for percentage calculation

@@ -21,7 +21,7 @@ export async function GET() {
       format: 'JSONEachRow',
     });
 
-    const data = await result.json();
+    const data = await result.json() as any[];
     
     // Categorize programs and aggregate by category
     const categoryMap = new Map<string, { count: number; color: string }>();
