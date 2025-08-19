@@ -40,15 +40,20 @@ class SolanaIngester {
     if (!this.leaderCache[epoch]) {
       logger.info(`Fetching leader schedule for epoch ${epoch}`);
       try {
-        const schedule = await this.connection.getLeaderSchedule(slot);
+        const schedule = await this.connection.getLeaderSchedule();
         const scheduleMap = new Map<number, string>();
         
-        for (const [validator, slots] of Object.entries(schedule)) {
-          for (const s of slots) {
-            scheduleMap.set(s, validator);
+        logger.debug(`Leader schedule for epoch ${epoch}: ${Object.keys(schedule || {}).length} validators`);
+        
+        if (schedule) {
+          for (const [validator, slots] of Object.entries(schedule)) {
+            for (const s of slots) {
+              scheduleMap.set(s, validator);
+            }
           }
         }
         
+        logger.debug(`Cached ${scheduleMap.size} slot assignments for epoch ${epoch}`);
         this.leaderCache[epoch] = scheduleMap;
       } catch (error) {
         logger.warn(`Failed to fetch leader schedule for epoch ${epoch}:`, error);
@@ -57,7 +62,11 @@ class SolanaIngester {
     }
     
     const slotInEpoch = slot - epochSchedule.getFirstSlotInEpoch(epoch);
-    return this.leaderCache[epoch].get(slotInEpoch) || 'unknown';
+    const validator = this.leaderCache[epoch].get(slotInEpoch) || 'unknown';
+    if (validator === 'unknown') {
+      logger.debug(`No validator found for slot ${slot} (slot-in-epoch: ${slotInEpoch}) in epoch ${epoch} (cache has ${this.leaderCache[epoch].size} entries)`);
+    }
+    return validator;
   }
 
   private async processSlot(slot: number): Promise<void> {

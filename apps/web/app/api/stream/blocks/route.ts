@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
           
         } catch (error) {
           console.error('SSE blocks error:', error);
-          const errorData = `data: ${JSON.stringify({ error: 'Failed to fetch blocks', details: error.message })}\n\n`;
+          const errorData = `data: ${JSON.stringify({ 
+            error: 'Failed to fetch blocks', 
+            details: error instanceof Error ? error.message : 'Unknown error' 
+          })}\n\n`;
           controller.enqueue(encoder.encode(errorData));
         }
       };

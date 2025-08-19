@@ -47,7 +47,7 @@ export default function ValidatorDetailPage() {
       
       if (response.ok) {
         setSlots(data.slots || []);
-        setTotalSlots(data.total || 0);
+        setTotalSlots(parseInt(data.total) || 0);
       } else {
         console.error('API error:', data);
         setSlots([]);
