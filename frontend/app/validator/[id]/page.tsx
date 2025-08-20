@@ -330,10 +330,10 @@ export default function ValidatorPage() {
         <span>{children}</span>
         <div className="flex flex-col">
           <ChevronUp 
-            className={`h-3 w-3 ${sortField === field && sortDirection === 'asc' ? 'text-blue-400' : 'text-gray-600'}`} 
+            className={`h-3 w-3 ${sortField === field && sortDirection === 'asc' ? 'text-gray-300' : 'text-gray-600'}`} 
           />
           <ChevronDown 
-            className={`h-3 w-3 -mt-1 ${sortField === field && sortDirection === 'desc' ? 'text-blue-400' : 'text-gray-600'}`} 
+            className={`h-3 w-3 -mt-1 ${sortField === field && sortDirection === 'desc' ? 'text-gray-300' : 'text-gray-600'}`} 
           />
         </div>
       </div>
@@ -421,58 +421,38 @@ export default function ValidatorPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Blocks Produced</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatNumber(stats?.blocks_produced || 0)}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-800 rounded-md">
-                  <TrendingUp className="h-6 w-6 text-blue-400" />
-                </div>
+              <div>
+                <p className="text-gray-400 text-sm">Blocks Produced</p>
+                <p className="text-2xl font-bold text-white">
+                  {formatNumber(stats?.blocks_produced || 0)}
+                </p>
               </div>
             </div>
             <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Total Transactions</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatNumber(stats?.total_transactions || 0)}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-800 rounded-md">
-                  <Activity className="h-6 w-6 text-green-400" />
-                </div>
+              <div>
+                <p className="text-gray-400 text-sm">Total Transactions</p>
+                <p className="text-2xl font-bold text-white">
+                  {formatNumber(stats?.total_transactions || 0)}
+                </p>
               </div>
             </div>
             <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Compute Units</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatNumber(stats?.total_cu_consumed || 0)}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-800 rounded-md">
-                  <Zap className="h-6 w-6 text-purple-400" />
-                </div>
+              <div>
+                <p className="text-gray-400 text-sm">Compute Units</p>
+                <p className="text-2xl font-bold text-white">
+                  {formatNumber(stats?.total_cu_consumed || 0)}
+                </p>
               </div>
             </div>
             <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Unique Programs</p>
-                  <p className="text-2xl font-bold text-white">{programs.length}</p>
-                  {apiPollingInterval && (
-                    <p className="text-xs text-green-400">
-                      📊 Polling
-                    </p>
-                  )}
-                </div>
-                <div className="p-3 bg-gray-800 rounded-md">
-                  <Activity className="h-6 w-6 text-orange-400" />
-                </div>
+              <div>
+                <p className="text-gray-400 text-sm">Unique Programs</p>
+                <p className="text-2xl font-bold text-white">{programs.length}</p>
+                {apiPollingInterval && (
+                  <p className="text-xs text-gray-500">
+                    Live data active
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -484,7 +464,7 @@ export default function ValidatorPage() {
         <div className="bg-gray-900 rounded-md border border-gray-800 p-6">
           <div className="flex items-center space-x-3 mb-4">
             <div className="p-2 bg-gray-800 rounded-md">
-              <GitCompare className="h-5 w-5 text-blue-400" />
+              <GitCompare className="h-5 w-5 text-gray-400" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">Compare Validators</h3>
@@ -545,7 +525,7 @@ export default function ValidatorPage() {
                 <button
                   onClick={() => setShowOnlyKnown(!showOnlyKnown)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    showOnlyKnown ? 'bg-blue-600' : 'bg-gray-600'
+                    showOnlyKnown ? 'bg-gray-500' : 'bg-gray-600'
                   }`}
                 >
                   <span
@@ -618,7 +598,7 @@ export default function ValidatorPage() {
                                   title="Copy address"
                                 >
                                   {copiedAddress === program.program_id ? (
-                                    <Check className="h-3 w-3 text-green-400" />
+                                    <Check className="h-3 w-3 text-gray-400" />
                                   ) : (
                                     <Copy className="h-3 w-3" />
                                   )}
