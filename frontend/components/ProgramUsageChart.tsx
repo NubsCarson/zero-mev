@@ -73,20 +73,29 @@ export default function ProgramUsageChart({ validatorId, timeRange }: ProgramUsa
   // Prepare data for charts
   const topPrograms = programUsage.slice(0, 10);
   
-  const pieData = topPrograms.map((program, index) => ({
-    name: program.program_name || truncateAddress(program.program_id),
-    value: program.avg_percentage,
-    invocations: program.total_invocations,
-    category: program.category,
-    color: COLORS[index % COLORS.length],
-  }));
+  // Calculate percentages based on total invocations
+  const totalInvocations = topPrograms.reduce((sum, p) => sum + Number(p.total_invocations), 0);
+  
+  const pieData = topPrograms.map((program, index) => {
+    const percentage = totalInvocations > 0 ? (Number(program.total_invocations) / totalInvocations) * 100 : 0;
+    return {
+      name: program.program_name || truncateAddress(program.program_id),
+      value: percentage,
+      invocations: program.total_invocations,
+      category: program.category,
+      color: COLORS[index % COLORS.length],
+    };
+  });
 
-  const barData = topPrograms.map((program) => ({
-    name: program.program_name || truncateAddress(program.program_id, 6),
-    percentage: program.avg_percentage,
-    invocations: program.total_invocations,
-    category: program.category,
-  }));
+  const barData = topPrograms.map((program) => {
+    const percentage = totalInvocations > 0 ? (Number(program.total_invocations) / totalInvocations) * 100 : 0;
+    return {
+      name: program.program_name || truncateAddress(program.program_id, 6),
+      percentage: percentage,
+      invocations: program.total_invocations,
+      category: program.category,
+    };
+  });
 
   const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{payload: {name: string; value?: number; percentage?: number; invocations: number; category?: string}}>; label?: string }) => {
     if (active && payload && payload.length) {
@@ -198,7 +207,7 @@ export default function ProgramUsageChart({ validatorId, timeRange }: ProgramUsa
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">
-                  {formatPercentage(program.avg_percentage)}
+                  {formatPercentage(totalInvocations > 0 ? (Number(program.total_invocations) / totalInvocations) * 100 : 0)}
                 </p>
                 <p className="text-xs text-gray-500">
                   {formatNumber(program.total_invocations)} calls

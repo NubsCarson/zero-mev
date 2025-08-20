@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, TrendingUp, Activity, Zap, Copy, Check, ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
 import Link from 'next/link';
-import { getValidatorStats, getValidatorProgramUsage, searchValidators, triggerValidatorIngestion, ProgramUsage, ValidatorStats } from '@/lib/api';
+import { getValidatorStats, getValidatorProgramUsage, getValidatorStatsQuick, getValidatorProgramUsageQuick, searchValidators, triggerValidatorIngestion, ProgramUsage, ValidatorStats } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
 import { useBlacklist } from '@/contexts/BlacklistContext';
 
@@ -27,53 +27,168 @@ export default function ValidatorPage() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [historicalDataLoaded, setHistoricalDataLoaded] = useState(false);
+  const [apiPollingInterval, setApiPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Reset state when validator or timeRange changes
+    setHistoricalDataLoaded(false);
+    
+    // Clear any existing polling interval
+    if (apiPollingInterval) {
+      clearInterval(apiPollingInterval);
+      setApiPollingInterval(null);
+    }
+    
     fetchData();
   }, [validatorId, timeRange]);
+
+
+  // API polling effect - starts after historical data is loaded
+  useEffect(() => {
+    if (!historicalDataLoaded) {
+      return;
+    }
+
+    console.log(`📊 Starting API polling for regular updates...`);
+    
+    const pollApiForUpdates = async () => {
+      try {
+        const [newStatsData, newProgramData] = await Promise.all([
+          getValidatorStatsQuick(validatorId, timeRange),
+          getValidatorProgramUsageQuick(validatorId, timeRange)
+        ]);
+
+        // Update stats if we have new data
+        if (newStatsData.length > 0) {
+          const newStats = newStatsData[0];
+          setStats(prevStats => {
+            // Only update if the data has actually changed
+            if (!prevStats || 
+                Number(newStats.blocks_produced) !== Number(prevStats.blocks_produced) ||
+                Number(newStats.total_transactions) !== Number(prevStats.total_transactions)) {
+              console.log(`📊 Updated stats: ${newStats.blocks_produced} blocks, ${newStats.total_transactions} transactions`);
+              return newStats;
+            }
+            return prevStats;
+          });
+        }
+
+        // Update programs if we have new data
+        if (newProgramData.length > 0) {
+          setPrograms(prevPrograms => {
+            // Check if program data has changed
+            if (prevPrograms.length !== newProgramData.length) {
+              console.log(`📊 Updated programs: ${newProgramData.length} total programs`);
+              return newProgramData.sort((a, b) => 
+                Number(b.total_invocations) - Number(a.total_invocations)
+              );
+            }
+            
+            // Check if any individual program data has changed
+            const hasChanges = newProgramData.some(newProgram => {
+              const existingProgram = prevPrograms.find(p => p.program_id === newProgram.program_id);
+              return !existingProgram || 
+                     Number(existingProgram.total_invocations) !== Number(newProgram.total_invocations) ||
+                     Number(existingProgram.total_cu_consumed) !== Number(newProgram.total_cu_consumed);
+            });
+            
+            if (hasChanges) {
+              console.log(`📊 Updated program data with new invocations/CU`);
+              return newProgramData.sort((a, b) => 
+                Number(b.total_invocations) - Number(a.total_invocations)
+              );
+            }
+            
+            return prevPrograms;
+          });
+        }
+      } catch (error) {
+        console.error('Error polling API for updates:', error);
+      }
+    };
+
+    // Poll every 30 seconds for API updates
+    const interval = setInterval(pollApiForUpdates, 30000);
+    setApiPollingInterval(interval);
+
+    // Cleanup
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+      setApiPollingInterval(null);
+    };
+  }, [validatorId, timeRange, historicalDataLoaded]);
+
+  // Cleanup effect for component unmount
+  useEffect(() => {
+    return () => {
+      if (apiPollingInterval) {
+        clearInterval(apiPollingInterval);
+      }
+    };
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     
     try {
+      console.log(`🔍 Fetching data for validator ${validatorId} (${timeRange})`);
+      
+      // Always trigger ingestion first to ensure we have the latest data for the timeframe
+      console.log(`📥 Triggering historical data ingestion for ${timeRange}...`);
+      await triggerValidatorIngestion(validatorId, timeRange);
+      
+      // Small delay to let ingestion start
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Now try to get data from database
       const [programData, statsData] = await Promise.all([
         getValidatorProgramUsage(validatorId, timeRange),
         getValidatorStats(validatorId, timeRange)
       ]);
       
-      // Check if we got any data
+      // Check if we got any data after ingestion
       const hasData = programData.length > 0 || statsData.length > 0;
       
       if (!hasData) {
-        // No data found, trigger ingestion
-        console.log(`No data found for validator ${validatorId}, triggering ingestion...`);
+        // Still no data, start polling
+        console.log(`⏳ Waiting for historical data ingestion to complete...`);
+        setError('Fetching historical blockchain data for the selected timeframe. This should complete in a minute or two.');
         
-        try {
-          await triggerValidatorIngestion(validatorId, timeRange);
-          setError('Data is being fetched from the blockchain. This should complete in a minute or two.');
-          
-          // Start polling for data
-          setIsPolling(true);
-          pollForData();
-        } catch (ingestError) {
-          console.error('Failed to trigger ingestion:', ingestError);
-          setError('Failed to fetch validator data. Please check the address and try again.');
-        }
+        setIsPolling(true);
+        pollForData();
+      } else {
+        console.log(`✅ Found ${programData.length} programs and ${statsData.length ? 'validator stats' : 'no stats'}`);
+        
+        // Sort programs by invocation count (descending)
+        const sortedPrograms = programData.sort((a, b) => 
+          Number(b.total_invocations) - Number(a.total_invocations)
+        );
+        
+        setPrograms(sortedPrograms);
+        setStats(statsData[0] || null);
+        setLoading(false);
+        
+        // Data loaded successfully, now we can start API polling
+        console.log(`📊 Historical data loaded, starting API polling...`);
+        setHistoricalDataLoaded(true);
       }
-      
-      // Sort programs by invocation count (descending)
-      const sortedPrograms = programData.sort((a, b) => 
-        Number(b.total_invocations) - Number(a.total_invocations)
-      );
-      
-      setPrograms(sortedPrograms);
-      setStats(statsData[0] || null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching data:', err);
-      setError('Failed to fetch validator data');
-    } finally {
-      setLoading(false);
+      
+      // Handle timeout specifically
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        console.log(`⏳ Initial data fetch timed out, but ingestion is running. Starting polling...`);
+        setError('Data ingestion in progress. This usually takes 1-2 minutes for the initial load.');
+        setIsPolling(true);
+        pollForData();
+      } else {
+        setError('Failed to fetch validator data');
+        setLoading(false);
+      }
     }
   };
 
@@ -86,8 +201,8 @@ export default function ValidatorPage() {
       
       try {
         const [statsData, programData] = await Promise.all([
-          getValidatorStats(validatorId, timeRange),
-          getValidatorProgramUsage(validatorId, timeRange)
+          getValidatorStatsQuick(validatorId, timeRange),
+          getValidatorProgramUsageQuick(validatorId, timeRange)
         ]);
         
         const hasData = statsData.length > 0 || programData.length > 0;
@@ -105,6 +220,7 @@ export default function ValidatorPage() {
           setPrograms(sortedPrograms);
           setStats(statsData[0] || null);
           setLoading(false);
+          setHistoricalDataLoaded(true);
         } else if (attempts < maxAttempts) {
           // No data yet, continue polling
           setTimeout(poll, 10000); // Poll every 10 seconds
@@ -136,6 +252,12 @@ export default function ValidatorPage() {
     return Number(num).toFixed(2) + '%';
   };
 
+  // Calculate percentage based on total invocations
+  const calculatePercentage = (program: ProgramUsage, allPrograms: ProgramUsage[]) => {
+    const totalInvocations = allPrograms.reduce((sum, p) => sum + Number(p.total_invocations), 0);
+    return totalInvocations > 0 ? (Number(program.total_invocations) / totalInvocations) * 100 : 0;
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -162,7 +284,7 @@ export default function ValidatorPage() {
       case 'invocations':
         return Number(program.total_invocations);
       case 'percentage':
-        return Number(program.avg_percentage);
+        return calculatePercentage(program, programs);
       case 'computeUnits':
         return Number(program.total_cu_consumed);
       case 'blocksUsed':
@@ -294,7 +416,7 @@ export default function ValidatorPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards Section */}
       {stats && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -302,7 +424,9 @@ export default function ValidatorPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Blocks Produced</p>
-                  <p className="text-2xl font-bold text-white">{formatNumber(stats.blocks_produced)}</p>
+                  <p className="text-2xl font-bold text-white">
+                    {formatNumber(stats?.blocks_produced || 0)}
+                  </p>
                 </div>
                 <div className="p-3 bg-gray-800 rounded-md">
                   <TrendingUp className="h-6 w-6 text-blue-400" />
@@ -313,7 +437,9 @@ export default function ValidatorPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Total Transactions</p>
-                  <p className="text-2xl font-bold text-white">{formatNumber(stats.total_transactions)}</p>
+                  <p className="text-2xl font-bold text-white">
+                    {formatNumber(stats?.total_transactions || 0)}
+                  </p>
                 </div>
                 <div className="p-3 bg-gray-800 rounded-md">
                   <Activity className="h-6 w-6 text-green-400" />
@@ -324,7 +450,9 @@ export default function ValidatorPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Compute Units</p>
-                  <p className="text-2xl font-bold text-white">{formatNumber(stats.total_cu_consumed)}</p>
+                  <p className="text-2xl font-bold text-white">
+                    {formatNumber(stats?.total_cu_consumed || 0)}
+                  </p>
                 </div>
                 <div className="p-3 bg-gray-800 rounded-md">
                   <Zap className="h-6 w-6 text-purple-400" />
@@ -336,6 +464,11 @@ export default function ValidatorPage() {
                 <div>
                   <p className="text-gray-400 text-sm">Unique Programs</p>
                   <p className="text-2xl font-bold text-white">{programs.length}</p>
+                  {apiPollingInterval && (
+                    <p className="text-xs text-green-400">
+                      📊 Polling
+                    </p>
+                  )}
                 </div>
                 <div className="p-3 bg-gray-800 rounded-md">
                   <Activity className="h-6 w-6 text-orange-400" />
@@ -464,6 +597,7 @@ export default function ValidatorPage() {
                     const isKnown = isProgramKnown(program.program_id);
                     const programName = getProgramName(program.program_id);
                     const colorClass = getProgramColor(program.program_id);
+                    const percentage = calculatePercentage(program, programs);
                     
                     return (
                       <tr key={program.program_id} className="hover:bg-gray-800 transition-colors">
@@ -501,13 +635,13 @@ export default function ValidatorPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="text-sm text-white">
-                              {formatPercentage(program.avg_percentage)}
+                              {formatPercentage(percentage)}
                             </div>
                             <div className="ml-2 flex-1 max-w-[100px]">
                               <div className="bg-gray-800 rounded-full h-2">
                                 <div 
                                   className={`h-2 rounded-full ${colorClass}`}
-                                  style={{ width: `${Math.min(Number(program.avg_percentage), 100)}%` }}
+                                  style={{ width: `${Math.min(percentage, 100)}%` }}
                                 />
                               </div>
                             </div>

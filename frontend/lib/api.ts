@@ -4,7 +4,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // Increased to 30 seconds for data ingestion
+});
+
+// Separate instance for quick polling calls
+const apiQuick = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000, // 10 seconds for polling calls
 });
 
 export interface ValidatorStats {
@@ -20,7 +26,6 @@ export interface ProgramUsage {
   program_name: string;
   category: string;
   total_invocations: number;
-  avg_percentage: number;
   total_cu_consumed: number;
   blocks_used: number;
 }
@@ -73,6 +78,29 @@ export const getValidatorProgramUsage = async (validatorId: string, timeRange = 
   return response.data;
 };
 
+// Quick polling versions with shorter timeouts
+export const getValidatorStatsQuick = async (validatorId: string, timeRange = '24h'): Promise<ValidatorStats[]> => {
+  const response = await apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
+    params: { timeRange },
+  });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getValidatorProgramUsageQuick = async (validatorId: string, timeRange = '24h'): Promise<ProgramUsage[]> => {
+  const response = await apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
+    params: { timeRange },
+  });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
 export const getTopValidators = async (timeRange = '24h', limit = 50): Promise<ValidatorSearchResult[]> => {
   const response = await api.get('/api/validators/top', {
     params: { timeRange, limit },
@@ -104,3 +132,4 @@ export const triggerValidatorIngestion = async (validatorId: string, timeRange =
   });
   return response.data;
 };
+

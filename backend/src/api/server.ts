@@ -18,6 +18,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+
 // Ingest validator data endpoint
 app.get('/api/ingest', handleIngestValidator);
 
@@ -84,6 +85,7 @@ app.get('/api/validators/top', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Get time-series data for validator
 app.get('/api/validators/:validatorId/timeseries', async (req, res) => {
@@ -162,6 +164,7 @@ function parseInterval(interval: string): number {
       return 60 * 60 * 1000;
   }
 }
+
 
 export async function startServer() {
   try {

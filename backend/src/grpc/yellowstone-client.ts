@@ -216,20 +216,30 @@ export class YellowstoneClient {
   
   private async getValidatorIdentityFromSlot(slot: number): Promise<string> {
     try {
-      // Try to get the leader schedule to find the real validator
+      // Get epoch info to properly calculate slot index
+      const epochInfo = await this.connection.getEpochInfo();
       const leaderSchedule = await this.connection.getLeaderSchedule();
-      if (leaderSchedule) {
-        const slotIndex = slot % 432000; // Epoch length
+      
+      if (leaderSchedule && epochInfo) {
+        // Calculate the slot index within the current epoch
+        const slotIndex = slot - epochInfo.absoluteSlot + epochInfo.slotIndex;
+        
+        console.log(`🔍 Slot ${slot}: epochInfo.absoluteSlot=${epochInfo.absoluteSlot}, epochInfo.slotIndex=${epochInfo.slotIndex}, calculated slotIndex=${slotIndex}`);
+        
         for (const [validator, slots] of Object.entries(leaderSchedule)) {
           if (slots.includes(slotIndex)) {
-            return validator.slice(0, 8) + '...'; // Truncate for display
+            console.log(`✅ Found validator ${validator} for slot ${slot} (slotIndex ${slotIndex})`);
+            return validator; // Return full validator ID
           }
         }
+        
+        console.log(`❌ No validator found for slot ${slot} (slotIndex ${slotIndex})`);
       }
     } catch (error) {
       console.error('Error getting validator identity:', error);
     }
     
+    console.log(`🔄 Falling back to deterministic validator for slot ${slot}`);
     return this.getValidatorFromSlot(slot);
   }
 

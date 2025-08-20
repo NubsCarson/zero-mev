@@ -208,12 +208,17 @@ export default function ComparePage() {
   const createComparisonData = (): ComparisonData[] => {
     const programMap = new Map<string, ComparisonData>();
     
+    // Calculate total invocations for each validator
+    const validator1TotalInvocations = validator1Programs.reduce((sum, p) => sum + Number(p.total_invocations), 0);
+    const validator2TotalInvocations = validator2Programs.reduce((sum, p) => sum + Number(p.total_invocations), 0);
+    
     // Add validator1 programs
     validator1Programs.forEach(program => {
+      const percentage = validator1TotalInvocations > 0 ? (Number(program.total_invocations) / validator1TotalInvocations) * 100 : 0;
       programMap.set(program.program_id, {
         program_id: program.program_id,
         validator1_invocations: Number(program.total_invocations),
-        validator1_percentage: Number(program.avg_percentage),
+        validator1_percentage: percentage,
         validator1_cu: Number(program.total_cu_consumed),
         validator1_blocks: Number(program.blocks_used),
         validator2_invocations: 0,
@@ -227,10 +232,11 @@ export default function ComparePage() {
     
     // Add validator2 programs
     validator2Programs.forEach(program => {
+      const percentage = validator2TotalInvocations > 0 ? (Number(program.total_invocations) / validator2TotalInvocations) * 100 : 0;
       const existing = programMap.get(program.program_id);
       if (existing) {
         existing.validator2_invocations = Number(program.total_invocations);
-        existing.validator2_percentage = Number(program.avg_percentage);
+        existing.validator2_percentage = percentage;
         existing.validator2_cu = Number(program.total_cu_consumed);
         existing.validator2_blocks = Number(program.blocks_used);
       } else {
@@ -241,7 +247,7 @@ export default function ComparePage() {
           validator1_cu: 0,
           validator1_blocks: 0,
           validator2_invocations: Number(program.total_invocations),
-          validator2_percentage: Number(program.avg_percentage),
+          validator2_percentage: percentage,
           validator2_cu: Number(program.total_cu_consumed),
           validator2_blocks: Number(program.blocks_used),
           difference_invocations: 0,

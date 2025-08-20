@@ -120,14 +120,11 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
             });
             
             // Insert program usage data
-            const totalInvocations = Array.from(programStats.values()).reduce((sum, stat) => sum + stat.count, 0);
-            
             const programUsageData = Array.from(programStats.entries()).map(([programId, stats]) => ({
               slot,
               validatorIdentity,
               programId,
               invocationCount: stats.count,
-              percentage: totalInvocations > 0 ? Math.round((stats.count / totalInvocations) * 100 * 100) / 100 : 0, // Round to 2 decimal places
               cuConsumed: stats.cu,
               timestamp: blockTime
             }));

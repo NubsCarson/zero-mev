@@ -83,7 +83,6 @@ export class ClickHouseManager {
     validatorIdentity: string;
     programId: string;
     invocationCount: number;
-    percentage: number;
     cuConsumed: number;
     timestamp: Date;
   }>) {
@@ -96,8 +95,7 @@ export class ClickHouseManager {
         validator_identity: data.validatorIdentity,
         program_id: data.programId,
         invocation_count: data.invocationCount,
-        percentage: Math.round(data.percentage), // Store as integer percentage
-        cu_consumed: data.cuConsumed,
+        cu_consumed: Math.round(data.cuConsumed),
         timestamp: data.timestamp.toISOString().replace(/\.\d{3}Z$/, ''),
       })),
       format: 'JSONEachRow',
@@ -137,7 +135,6 @@ export class ClickHouseManager {
           p.name as program_name,
           p.category,
           sum(pu.invocation_count) as total_invocations,
-          avg(pu.percentage) as avg_percentage,
           sum(pu.cu_consumed) as total_cu_consumed,
           count(DISTINCT pu.slot) as blocks_used
         FROM program_usage pu

@@ -54,7 +54,6 @@ async function main() {
               validatorIdentity: blockData.validatorIdentity,
               programId: program.programId,
               invocationCount: program.invocationCount,
-              percentage: program.percentage,
               cuConsumed: program.cuConsumed,
               timestamp: blockData.timestamp,
             }));

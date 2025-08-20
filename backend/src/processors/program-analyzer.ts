@@ -4,7 +4,6 @@ import bs58 from 'bs58';
 export interface ProgramUsage {
   programId: string;
   invocationCount: number;
-  percentage: number;
   cuConsumed: number;
 }
 
@@ -148,16 +147,14 @@ export class ProgramAnalyzer {
       }
     }
 
-    // Calculate percentages and create usage array
+    // Create usage array
     const programUsage: ProgramUsage[] = [];
     for (const [programId, invocationCount] of programInvocations.entries()) {
-      const percentage = totalInstructions > 0 ? parseFloat(((invocationCount / totalInstructions) * 100).toFixed(2)) : 0;
       const cuConsumed = programCuUsage.get(programId) || 0;
 
       programUsage.push({
         programId,
         invocationCount,
-        percentage,
         cuConsumed,
       });
     }
