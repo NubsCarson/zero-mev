@@ -1,0 +1,94 @@
+version: "3.8"
+
+services:
+        # ClickHouse Database
+        clickhouse:
+                image: clickhouse/clickhouse-server:23.11
+                container_name: validator-analytics-clickhouse
+                ports:
+                        - "8123:8123"
+                        - "9000:9000"
+                environment:
+                        CLICKHOUSE_DB: validator_analytics
+                        CLICKHOUSE_USER: default
+                        CLICKHOUSE_PASSWORD: ""
+                volumes:
+                        - clickhouse_data:/var/lib/clickhouse
+                        - ./backend/src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+                networks:
+                        - validator-analytics
+                healthcheck:
+                        test:
+                                [
+                                        "CMD",
+                                        "wget",
+                                        "--no-verbose",
+                                        "--tries=1",
+                                        "--spider",
+                                        "http://localhost:8123/ping",
+                                ]
+                        interval: 10s
+                        timeout: 5s
+                        retries: 5
+
+        # Backend Service
+        backend:
+                build:
+                        context: ./backend
+                        dockerfile: Dockerfile
+                container_name: validator-analytics-backend
+                ports:
+                        - "3001:3001"
+                environment:
+                        - NODE_ENV=production
+                        - PORT=3001
+                        - CLICKHOUSE_URL=http://clickhouse:8123
+                        - CLICKHOUSE_DATABASE=validator_analytics
+                        - CLICKHOUSE_USERNAME=default
+                        - CLICKHOUSE_PASSWORD=
+                        - CORS_ORIGIN=http://localhost:3000
+                        - YELLOWSTONE_GRPC_URL=https://solana-yellowstone-grpc.publicnode.com
+                        - YELLOWSTONE_API_TOKEN=
+                depends_on:
+                        clickhouse:
+                                condition: service_healthy
+                networks:
+                        - validator-analytics
+                restart: unless-stopped
+
+        # Frontend Service
+        frontend:
+                build:
+                        context: ./frontend
+                        dockerfile: Dockerfile
+                container_name: validator-analytics-frontend
+                ports:
+                        - "3000:3000"
+                environment:
+                        - NODE_ENV=production
+                        - NEXT_PUBLIC_API_URL=http://localhost:3001
+                depends_on:
+                        - backend
+                networks:
+                        - validator-analytics
+                restart: unless-stopped
+
+        # Redis for caching (optional)
+        redis:
+                image: redis:7-alpine
+                container_name: validator-analytics-redis
+                ports:
+                        - "6379:6379"
+                volumes:
+                        - redis_data:/data
+                networks:
+                        - validator-analytics
+                command: redis-server --appendonly yes
+
+volumes:
+        clickhouse_data:
+        redis_data:
+
+networks:
+        validator-analytics:
+                driver: bridge
