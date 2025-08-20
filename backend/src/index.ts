@@ -14,21 +14,58 @@ async function main() {
     // Start the API server
     await startServer();
 
-    // Start block processing
+    // Start block processing with real data
     yellowstoneClient.subscribeToBlocks(async (blockData) => {
       try {
         console.log(`📦 Processing block ${blockData.slot} from validator ${blockData.validatorIdentity}`);
 
-        // PRODUCTION: Skip mock data generation - only use on-demand ingestion
-        return;
-        
-        // const mockTransactions = programAnalyzer.generateMockTransactions(Math.floor(Math.random() * 20) + 5);
-        // const analysis = programAnalyzer.analyzeBlock(mockTransactions);
+        // Process real transaction data from the block
+        if (blockData.transactions && blockData.transactions.length > 0) {
+          console.log(`📊 Block ${blockData.slot} has ${blockData.transactions.length} transactions`);
+          // Debug: log the first transaction structure
+          if (blockData.transactions[0]) {
+            const tx = blockData.transactions[0];
+            console.log('🔍 Sample transaction keys:', Object.keys(tx));
+            if (tx.transaction) {
+              console.log('🔍 Transaction.message keys:', Object.keys(tx.transaction.message || {}));
+              console.log('🔍 Instructions count:', tx.transaction.message?.instructions?.length || 0);
+            } else {
+              console.log('🔍 No transaction field found');
+            }
+          }
+          const analysis = programAnalyzer.analyzeBlock(blockData.transactions);
+          
+          // Store block metadata
+          await clickHouseManager.insertBlock({
+            slot: blockData.slot,
+            hash: blockData.hash,
+            parentHash: blockData.parentHash,
+            timestamp: blockData.timestamp,
+            validatorIdentity: blockData.validatorIdentity,
+            transactionCount: blockData.transactions.length,
+            totalInstructions: analysis.totalInstructions,
+            totalCuConsumed: analysis.totalCuConsumed,
+          });
 
-        // COMMENTED OUT - using on-demand ingestion only
-        // await clickHouseManager.insertBlock(...);
-        // await clickHouseManager.insertProgramUsage(...);
-        // console.log(`✅ Processed block ${blockData.slot} with ${analysis.programUsage.length} unique programs`);
+          // Store program usage data
+          if (analysis.programUsage.length > 0) {
+            const programUsageData = analysis.programUsage.map(program => ({
+              slot: blockData.slot,
+              validatorIdentity: blockData.validatorIdentity,
+              programId: program.programId,
+              invocationCount: program.invocationCount,
+              percentage: program.percentage,
+              cuConsumed: program.cuConsumed,
+              timestamp: blockData.timestamp,
+            }));
+            
+            await clickHouseManager.insertProgramUsage(programUsageData);
+          }
+
+          console.log(`✅ Processed block ${blockData.slot} with ${analysis.programUsage.length} unique programs, ${analysis.totalInstructions} instructions`);
+        } else {
+          console.log(`📦 Block ${blockData.slot} has no transactions to process`);
+        }
       } catch (error) {
         console.error(`❌ Error processing block ${blockData.slot}:`, error);
       }

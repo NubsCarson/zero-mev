@@ -96,7 +96,7 @@ export class ClickHouseManager {
         validator_identity: data.validatorIdentity,
         program_id: data.programId,
         invocation_count: data.invocationCount,
-        percentage: data.percentage,
+        percentage: Math.round(data.percentage), // Store as integer percentage
         cu_consumed: data.cuConsumed,
         timestamp: data.timestamp.toISOString().replace(/\.\d{3}Z$/, ''),
       })),

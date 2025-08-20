@@ -9,11 +9,11 @@ export interface ProgramUsage {
 }
 
 export interface Transaction {
-  signature: string;
-  meta: {
+  signature?: string;
+  meta?: {
     computeUnitsConsumed?: number;
     err?: any;
-    innerInstructions: Array<{
+    innerInstructions?: Array<{
       instructions: Array<{
         programIdIndex: number;
         accounts: number[];
@@ -21,7 +21,7 @@ export interface Transaction {
       }>;
     }>;
   };
-  transaction: {
+  transaction?: {
     message: {
       accountKeys: string[];
       instructions: Array<{
@@ -73,43 +73,75 @@ export class ProgramAnalyzer {
     let totalCuConsumed = 0;
 
     for (const tx of transactions) {
-      if (tx.meta && !tx.meta.err) {
-        // Count main instructions
-        for (const instruction of tx.transaction.message.instructions) {
-          const programId = tx.transaction.message.accountKeys[instruction.programIdIndex];
-          this.incrementProgramUsage(programInvocations, programId);
-          totalInstructions++;
-        }
-
-        // Count inner instructions
-        if (tx.meta.innerInstructions) {
-          for (const innerInstructionSet of tx.meta.innerInstructions) {
-            for (const innerInstruction of innerInstructionSet.instructions) {
-              const programId = tx.transaction.message.accountKeys[innerInstruction.programIdIndex];
-              this.incrementProgramUsage(programInvocations, programId);
-              totalInstructions++;
+      if (!tx || !tx.transaction || !tx.transaction.message) {
+        continue; // Skip invalid transactions
+      }
+      
+      const hasError = tx.meta && tx.meta.err;
+      if (!hasError) {
+        // Handle both legacy and versioned transaction formats
+        const message = tx.transaction.message;
+        const instructions = message.instructions || message.compiledInstructions || [];
+        const accountKeys = message.accountKeys || message.staticAccountKeys || [];
+        
+        if (instructions && Array.isArray(instructions) && accountKeys && Array.isArray(accountKeys)) {
+          // Count main instructions
+          for (const instruction of instructions) {
+            if (instruction.programIdIndex < accountKeys.length) {
+              const programId = accountKeys[instruction.programIdIndex];
+              if (programId) {
+                this.incrementProgramUsage(programInvocations, programId);
+                totalInstructions++;
+              }
             }
           }
-        }
 
-        // Track compute units
-        const cuConsumed = tx.meta.computeUnitsConsumed || 0;
-        totalCuConsumed += cuConsumed;
+          // Count inner instructions
+          if (tx.meta && tx.meta.innerInstructions && Array.isArray(tx.meta.innerInstructions)) {
+            for (const innerInstructionSet of tx.meta.innerInstructions) {
+              if (innerInstructionSet.instructions && Array.isArray(innerInstructionSet.instructions)) {
+                for (const innerInstruction of innerInstructionSet.instructions) {
+                  if (innerInstruction.programIdIndex < accountKeys.length) {
+                    const programId = accountKeys[innerInstruction.programIdIndex];
+                    if (programId) {
+                      this.incrementProgramUsage(programInvocations, programId);
+                      totalInstructions++;
+                    }
+                  }
+                }
+              }
+            }
+          }
 
-        // Distribute CU consumption across programs proportionally
-        const txProgramCount = this.countTransactionPrograms(tx);
-        const cuPerProgram = cuConsumed / Math.max(txProgramCount, 1);
+          // Track compute units
+          const cuConsumed = (tx.meta && tx.meta.computeUnitsConsumed) || 0;
+          totalCuConsumed += cuConsumed;
 
-        for (const instruction of tx.transaction.message.instructions) {
-          const programId = tx.transaction.message.accountKeys[instruction.programIdIndex];
-          this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
-        }
+          // Distribute CU consumption across programs proportionally
+          const txProgramCount = this.countTransactionPrograms(tx);
+          const cuPerProgram = cuConsumed / Math.max(txProgramCount, 1);
 
-        if (tx.meta.innerInstructions) {
-          for (const innerInstructionSet of tx.meta.innerInstructions) {
-            for (const innerInstruction of innerInstructionSet.instructions) {
-              const programId = tx.transaction.message.accountKeys[innerInstruction.programIdIndex];
-              this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
+          for (const instruction of instructions) {
+            if (instruction.programIdIndex < accountKeys.length) {
+              const programId = accountKeys[instruction.programIdIndex];
+              if (programId) {
+                this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
+              }
+            }
+          }
+
+          if (tx.meta && tx.meta.innerInstructions && Array.isArray(tx.meta.innerInstructions)) {
+            for (const innerInstructionSet of tx.meta.innerInstructions) {
+              if (innerInstructionSet.instructions && Array.isArray(innerInstructionSet.instructions)) {
+                for (const innerInstruction of innerInstructionSet.instructions) {
+                  if (innerInstruction.programIdIndex < accountKeys.length) {
+                    const programId = accountKeys[innerInstruction.programIdIndex];
+                    if (programId) {
+                      this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -119,7 +151,7 @@ export class ProgramAnalyzer {
     // Calculate percentages and create usage array
     const programUsage: ProgramUsage[] = [];
     for (const [programId, invocationCount] of programInvocations.entries()) {
-      const percentage = totalInstructions > 0 ? Math.round((invocationCount / totalInstructions) * 100 * 100) / 100 : 0;
+      const percentage = totalInstructions > 0 ? parseFloat(((invocationCount / totalInstructions) * 100).toFixed(2)) : 0;
       const cuConsumed = programCuUsage.get(programId) || 0;
 
       programUsage.push({
@@ -149,18 +181,37 @@ export class ProgramAnalyzer {
   }
 
   private countTransactionPrograms(tx: Transaction): number {
-    const uniquePrograms = new Set<string>();
-
-    for (const instruction of tx.transaction.message.instructions) {
-      const programId = tx.transaction.message.accountKeys[instruction.programIdIndex];
-      uniquePrograms.add(programId);
+    if (!tx || !tx.transaction || !tx.transaction.message) {
+      return 0;
     }
+    
+    const uniquePrograms = new Set<string>();
+    const message = tx.transaction.message;
+    const instructions = message.instructions || message.compiledInstructions || [];
+    const accountKeys = message.accountKeys || message.staticAccountKeys || [];
 
-    if (tx.meta.innerInstructions) {
-      for (const innerInstructionSet of tx.meta.innerInstructions) {
-        for (const innerInstruction of innerInstructionSet.instructions) {
-          const programId = tx.transaction.message.accountKeys[innerInstruction.programIdIndex];
-          uniquePrograms.add(programId);
+    if (instructions && Array.isArray(instructions) && accountKeys && Array.isArray(accountKeys)) {
+      for (const instruction of instructions) {
+        if (instruction.programIdIndex < accountKeys.length) {
+          const programId = accountKeys[instruction.programIdIndex];
+          if (programId) {
+            uniquePrograms.add(programId);
+          }
+        }
+      }
+
+      if (tx.meta && tx.meta.innerInstructions && Array.isArray(tx.meta.innerInstructions)) {
+        for (const innerInstructionSet of tx.meta.innerInstructions) {
+          if (innerInstructionSet.instructions && Array.isArray(innerInstructionSet.instructions)) {
+            for (const innerInstruction of innerInstructionSet.instructions) {
+              if (innerInstruction.programIdIndex < accountKeys.length) {
+                const programId = accountKeys[innerInstruction.programIdIndex];
+                if (programId) {
+                  uniquePrograms.add(programId);
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -174,38 +225,8 @@ export class ProgramAnalyzer {
 
   // PRODUCTION: Mock transaction generation disabled
   generateMockTransactions(count: number = 10): Transaction[] {
-    // PRODUCTION: Disabled - return empty array\n    return [];\n    \n    /*\n    const transactions: Transaction[] = [];
-    const programIds = Array.from(this.knownPrograms.keys());
-
-    for (let i = 0; i < count; i++) {
-      const numInstructions = Math.floor(Math.random() * 5) + 1;
-      const instructions = [];
-      const accountKeys = programIds.slice(0, numInstructions);
-
-      for (let j = 0; j < numInstructions; j++) {
-        instructions.push({
-          programIdIndex: j,
-          accounts: [0, 1, 2],
-          data: bs58.encode(Buffer.from('mock_instruction_data')),
-        });
-      }
-
-      transactions.push({
-        signature: bs58.encode(Buffer.from(`mock_sig_${i}`)),
-        meta: {
-          computeUnitsConsumed: Math.floor(Math.random() * 200000) + 5000,
-          innerInstructions: [],
-        },
-        transaction: {
-          message: {
-            accountKeys,
-            instructions,
-          },
-        },
-      });
-    }
-
-    return transactions;\n    */
+    // PRODUCTION: Disabled - return empty array
+    return [];
   }
 }
 
