@@ -60,6 +60,9 @@ export class ClickHouseManager {
     transactionCount: number;
     totalCuConsumed: number;
   }) {
+    // Format timestamp for ClickHouse (remove milliseconds and Z suffix)
+    const formattedTimestamp = blockData.timestamp.toISOString().replace(/\.\d{3}Z$/, '');
+    
     await this.client.insert({
       table: 'blocks',
       values: [{
@@ -67,7 +70,7 @@ export class ClickHouseManager {
         hash: blockData.hash,
         parent_hash: blockData.parentHash,
         validator_identity: blockData.validatorIdentity,
-        timestamp: blockData.timestamp,
+        timestamp: formattedTimestamp,
         transaction_count: blockData.transactionCount,
         total_cu_consumed: blockData.totalCuConsumed,
       }],
@@ -95,7 +98,7 @@ export class ClickHouseManager {
         invocation_count: data.invocationCount,
         percentage: data.percentage,
         cu_consumed: data.cuConsumed,
-        timestamp: data.timestamp,
+        timestamp: data.timestamp.toISOString().replace(/\.\d{3}Z$/, ''),
       })),
       format: 'JSONEachRow',
     });

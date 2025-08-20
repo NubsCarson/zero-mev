@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from '../config/index.js';
 import { clickHouseManager } from '../database/client.js';
+import { handleIngestValidator } from './routes/ingest.js';
 
 const app = express();
 
@@ -15,6 +16,9 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Ingest validator data endpoint
+app.get('/api/ingest', handleIngestValidator);
 
 // Search validators
 app.get('/api/validators/search', async (req, res) => {

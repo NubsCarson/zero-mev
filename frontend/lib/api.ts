@@ -41,6 +41,13 @@ export const searchValidators = async (query: string, limit = 20): Promise<Valid
   const response = await api.get('/api/validators/search', {
     params: { q: query, limit },
   });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data.map((item: any) => ({
+      validator_identity: item.validator_identity,
+      blocks_produced: Number(item.blocks_produced)
+    }));
+  }
   return response.data;
 };
 
@@ -48,6 +55,10 @@ export const getValidatorStats = async (validatorId: string, timeRange = '24h'):
   const response = await api.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
     params: { timeRange },
   });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
   return response.data;
 };
 
@@ -55,6 +66,10 @@ export const getValidatorProgramUsage = async (validatorId: string, timeRange = 
   const response = await api.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
     params: { timeRange },
   });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
   return response.data;
 };
 
@@ -62,6 +77,13 @@ export const getTopValidators = async (timeRange = '24h', limit = 50): Promise<V
   const response = await api.get('/api/validators/top', {
     params: { timeRange, limit },
   });
+  // Handle ClickHouse response format
+  if (response.data && response.data.data) {
+    return response.data.data.map((item: any) => ({
+      validator_identity: item.validator_identity,
+      blocks_produced: Number(item.blocks_produced)
+    }));
+  }
   return response.data;
 };
 
@@ -72,6 +94,13 @@ export const getValidatorTimeSeries = async (
 ): Promise<TimeSeriesPoint[]> => {
   const response = await api.get(`/api/validators/${encodeURIComponent(validatorId)}/timeseries`, {
     params: { timeRange, interval },
+  });
+  return response.data;
+};
+
+export const triggerValidatorIngestion = async (validatorId: string, timeRange = '24h'): Promise<{ message: string; status: string }> => {
+  const response = await api.get('/api/ingest', {
+    params: { validator: validatorId, timeRange },
   });
   return response.data;
 };

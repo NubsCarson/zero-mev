@@ -9,9 +9,9 @@ export const config = {
   },
   clickhouse: {
     url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-    database: process.env.CLICKHOUSE_DATABASE || 'validator_analytics',
-    username: process.env.CLICKHOUSE_USERNAME || 'default',
-    password: process.env.CLICKHOUSE_PASSWORD || '',
+    database: process.env.CLICKHOUSE_DB || 'validator_analytics',
+    username: process.env.CLICKHOUSE_USER || 'default',
+    password: process.env.CLICKHOUSE_PASS || '',
   },
   server: {
     port: parseInt(process.env.PORT || '3001'),
