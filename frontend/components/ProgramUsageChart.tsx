@@ -121,7 +121,7 @@ export default function ProgramUsageChart({ validatorId, timeRange }: ProgramUsa
             className={`px-3 py-1 text-sm rounded-md ${
               viewType === 'pie'
                 ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
             Pie Chart
@@ -131,7 +131,7 @@ export default function ProgramUsageChart({ validatorId, timeRange }: ProgramUsa
             className={`px-3 py-1 text-sm rounded-md ${
               viewType === 'bar'
                 ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
             Bar Chart

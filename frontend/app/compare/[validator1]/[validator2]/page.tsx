@@ -6,6 +6,7 @@ import { ArrowLeft, TrendingUp, Activity, Zap, GitCompare, Users, BarChart3, Che
 import Link from 'next/link';
 import { getValidatorStats, getValidatorProgramUsage, triggerValidatorIngestion, ProgramUsage, ValidatorStats } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
+import { useBlacklist } from '@/contexts/BlacklistContext';
 
 interface ComparisonData {
   program_id: string;
@@ -259,9 +260,15 @@ export default function ComparePage() {
     return comparisonData;
   };
 
+  // Get blacklist hook
+  const { isBlacklisted } = useBlacklist();
+
   // Filter and sort comparison data
   const getFilteredAndSortedData = (): ComparisonData[] => {
     let filteredData = createComparisonData();
+    
+    // Apply blacklist filter
+    filteredData = filteredData.filter(item => !isBlacklisted(item.program_id));
     
     // Apply known programs filter
     if (showOnlyKnown) {
@@ -305,7 +312,7 @@ export default function ComparePage() {
     const isActive = sortField === field;
     return (
       <th 
-        className={`px-6 py-3 text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-gray-700/30 transition-colors ${className}`}
+        className={`px-6 py-3 text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-gray-800 transition-colors ${className}`}
         onClick={() => handleSort(field)}
       >
         <div className="flex items-center justify-center space-x-1">
@@ -321,20 +328,20 @@ export default function ComparePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-gray-950">
       {/* Header */}
-      <div className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700">
+      <div className="bg-gray-900 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Link 
                 href={`/validator/${validator1Id}?timeRange=${timeRange}`}
-                className="p-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 transition-colors"
+                className="p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-colors"
               >
                 <ArrowLeft className="h-5 w-5 text-gray-300" />
               </Link>
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg">
+                <div className="p-2 bg-gray-800 rounded-md">
                   <GitCompare className="h-6 w-6 text-white" />
                 </div>
                 <div>
@@ -356,9 +363,9 @@ export default function ComparePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Validator 1 */}
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 p-6">
+            <div className="bg-gray-900 rounded-md border border-gray-800 p-6">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
+                <div className="p-2 bg-gray-800 rounded-md">
                   <Users className="h-5 w-5 text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -387,9 +394,9 @@ export default function ComparePage() {
             </div>
 
             {/* Validator 2 */}
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 p-6">
+            <div className="bg-gray-900 rounded-md border border-gray-800 p-6">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
+                <div className="p-2 bg-gray-800 rounded-md">
                   <Users className="h-5 w-5 text-purple-400" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -422,7 +429,7 @@ export default function ComparePage() {
 
       {/* Comparison Table */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 overflow-hidden">
+        <div className="bg-gray-900 rounded-md border border-gray-800 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <div>
@@ -437,7 +444,7 @@ export default function ComparePage() {
                     type="checkbox"
                     checked={showOnlyKnown}
                     onChange={(e) => setShowOnlyKnown(e.target.checked)}
-                    className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                    className="rounded border-gray-700 bg-gray-800 text-gray-400 focus:ring-gray-600 focus:ring-offset-gray-900"
                   />
                   <span>Known programs only</span>
                   <Filter className="h-4 w-4 text-gray-400" />
@@ -493,7 +500,7 @@ export default function ComparePage() {
                     const colorClass = getProgramColor(comparison.program_id);
                     
                     return (
-                      <tr key={comparison.program_id} className="hover:bg-gray-700/30 transition-colors">
+                      <tr key={comparison.program_id} className="hover:bg-gray-800 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-3">
                             <div className={`w-2 h-2 rounded-full ${colorClass}`} />

@@ -81,7 +81,7 @@ export default function SearchBar({ timeRange = '24h', placeholder = "Enter vali
               }}
               onKeyPress={handleKeyPress}
               placeholder={placeholder}
-              className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white shadow-sm"
+              className="w-full pl-10 pr-10 py-3 border border-gray-700 rounded-md focus:ring-2 focus:ring-gray-600 focus:border-gray-600 text-gray-100 bg-gray-900 placeholder-gray-400"
             />
             {query && (
               <button
@@ -95,14 +95,14 @@ export default function SearchBar({ timeRange = '24h', placeholder = "Enter vali
           <button
             onClick={handleSearch}
             disabled={isLoading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-3 bg-gray-800 text-gray-100 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? 'Searching...' : 'Search'}
           </button>
         </div>
         
         {error && (
-          <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-md p-3">
             {error}
           </div>
         )}

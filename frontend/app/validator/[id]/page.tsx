@@ -6,6 +6,7 @@ import { ArrowLeft, TrendingUp, Activity, Zap, Copy, Check, ChevronUp, ChevronDo
 import Link from 'next/link';
 import { getValidatorStats, getValidatorProgramUsage, searchValidators, triggerValidatorIngestion, ProgramUsage, ValidatorStats } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
+import { useBlacklist } from '@/contexts/BlacklistContext';
 
 export default function ValidatorPage() {
   const params = useParams();
@@ -171,11 +172,19 @@ export default function ValidatorPage() {
     }
   };
 
+  // Get blacklist hook
+  const { isBlacklisted } = useBlacklist();
+
   // Filter and sort programs
-  const filteredAndSortedPrograms = (showOnlyKnown 
-    ? programs.filter(program => isProgramKnown(program.program_id))
-    : programs
-  ).sort((a, b) => {
+  const filteredAndSortedPrograms = programs
+    .filter(program => {
+      // Apply blacklist filter
+      if (isBlacklisted(program.program_id)) return false;
+      // Apply known programs filter
+      if (showOnlyKnown && !isProgramKnown(program.program_id)) return false;
+      return true;
+    })
+    .sort((a, b) => {
     const aValue = getSortValue(a, sortField);
     const bValue = getSortValue(b, sortField);
     
@@ -260,15 +269,15 @@ export default function ValidatorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-gray-950">
       {/* Header */}
-      <div className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700">
+      <div className="bg-gray-900 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Link 
                 href="/"
-                className="p-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 transition-colors"
+                className="p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-colors"
               >
                 <ArrowLeft className="h-5 w-5 text-gray-300" />
               </Link>
@@ -289,46 +298,46 @@ export default function ValidatorPage() {
       {stats && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Blocks Produced</p>
                   <p className="text-2xl font-bold text-white">{formatNumber(stats.blocks_produced)}</p>
                 </div>
-                <div className="p-3 bg-blue-500/20 rounded-lg">
+                <div className="p-3 bg-gray-800 rounded-md">
                   <TrendingUp className="h-6 w-6 text-blue-400" />
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Total Transactions</p>
                   <p className="text-2xl font-bold text-white">{formatNumber(stats.total_transactions)}</p>
                 </div>
-                <div className="p-3 bg-green-500/20 rounded-lg">
+                <div className="p-3 bg-gray-800 rounded-md">
                   <Activity className="h-6 w-6 text-green-400" />
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Compute Units</p>
                   <p className="text-2xl font-bold text-white">{formatNumber(stats.total_cu_consumed)}</p>
                 </div>
-                <div className="p-3 bg-purple-500/20 rounded-lg">
+                <div className="p-3 bg-gray-800 rounded-md">
                   <Zap className="h-6 w-6 text-purple-400" />
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Unique Programs</p>
                   <p className="text-2xl font-bold text-white">{programs.length}</p>
                 </div>
-                <div className="p-3 bg-orange-500/20 rounded-lg">
+                <div className="p-3 bg-gray-800 rounded-md">
                   <Activity className="h-6 w-6 text-orange-400" />
                 </div>
               </div>
@@ -339,9 +348,9 @@ export default function ValidatorPage() {
 
       {/* Comparison Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 p-6">
+        <div className="bg-gray-900 rounded-md border border-gray-800 p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
+            <div className="p-2 bg-gray-800 rounded-md">
               <GitCompare className="h-5 w-5 text-blue-400" />
             </div>
             <div>
@@ -362,13 +371,13 @@ export default function ValidatorPage() {
                   }}
                   onKeyPress={handleCompareKeyPress}
                   placeholder="Enter validator address to compare against..."
-                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-md focus:ring-1 focus:ring-gray-600 focus:border-gray-600 text-gray-100 placeholder-gray-400"
                 />
               </div>
               <button
                 onClick={handleCompare}
                 disabled={compareLoading}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                className="px-6 py-3 bg-gray-800 text-gray-100 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 border border-gray-700"
               >
                 <GitCompare className="h-4 w-4" />
                 <span>{compareLoading ? 'Validating...' : 'Compare'}</span>
@@ -376,7 +385,7 @@ export default function ValidatorPage() {
             </div>
             
             {compareError && (
-              <div className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg p-3">
+              <div className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-md p-3">
                 {compareError}
               </div>
             )}
@@ -386,7 +395,7 @@ export default function ValidatorPage() {
 
       {/* Program List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 overflow-hidden">
+        <div className="bg-gray-900 rounded-md border border-gray-800 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <div>
@@ -441,7 +450,7 @@ export default function ValidatorPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-900/50">
+                <thead className="bg-gray-800">
                   <tr>
                     <SortableHeader field="program">Program</SortableHeader>
                     <SortableHeader field="invocations">Invocations</SortableHeader>
@@ -457,7 +466,7 @@ export default function ValidatorPage() {
                     const colorClass = getProgramColor(program.program_id);
                     
                     return (
-                      <tr key={program.program_id} className="hover:bg-gray-700/30 transition-colors">
+                      <tr key={program.program_id} className="hover:bg-gray-800 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-3">
                             <div className={`w-2 h-2 rounded-full ${colorClass}`} />
@@ -495,7 +504,7 @@ export default function ValidatorPage() {
                               {formatPercentage(program.avg_percentage)}
                             </div>
                             <div className="ml-2 flex-1 max-w-[100px]">
-                              <div className="bg-gray-700 rounded-full h-2">
+                              <div className="bg-gray-800 rounded-full h-2">
                                 <div 
                                   className={`h-2 rounded-full ${colorClass}`}
                                   style={{ width: `${Math.min(Number(program.avg_percentage), 100)}%` }}
