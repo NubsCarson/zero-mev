@@ -1,599 +1,392 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { BarChart3, Clock, TrendingUp, X } from 'lucide-react';
-import LineChart from '@/components/LineChart';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, TrendingUp, Clock } from 'lucide-react';
 import ProgramTag from '@/components/ProgramTag';
-import CategoryLegend from '@/components/CategoryLegend';
-import HeaderNav from '@/components/HeaderNav';
-import { formatProgramDisplay } from '@/lib/programRegistry';
+import LineChart from '@/components/LineChart';
+import { getProgramInfo } from '@/lib/programRegistry';
 
-interface Program {
+interface ValidatorInfo {
+  vote_identity: string;
+  name: string;
+  image?: string;
+  description?: string;
+  website?: string;
+  commission?: number;
+  jito_commission_bps?: number;
+  apy_estimate?: number;
+  ip_city?: string;
+  ip_country?: string;
+  activated_stake?: number;
+}
+
+interface ProgramUsage {
   program_id: string;
   cnt: number;
+  percentage: number;
 }
 
-interface ProgramStats {
-  ts: string;
-  cnt: number;
-}
 
-export default function Home() {
-  const [from, setFrom] = useState<string>(() => {
-    // Default to 7 days ago
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return date.toISOString().split('T')[0];
-  });
-  const [to, setTo] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
-  });
-  const [validator, setValidator] = useState<string>('all');
-  const [excludeBlacklisted, setExcludeBlacklisted] = useState(true);
-  const [programs, setPrograms] = useState<Program[]>([]);
+
+export default function ValidatorSearch() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedValidator, setSelectedValidator] = useState<string>('');
+  const [validatorInfo, setValidatorInfo] = useState<ValidatorInfo | null>(null);
+  const [validatorsList, setValidatorsList] = useState<ValidatorInfo[]>([]);
+  const [programUsage, setProgramUsage] = useState<ProgramUsage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
-  const [programStats, setProgramStats] = useState<ProgramStats[]>([]);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [isLiveMode, setIsLiveMode] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
-  const [currentProgramsPage, setCurrentProgramsPage] = useState(1);
-  const [programsPerPage] = useState(5);
 
-  const fetchPrograms = async (isAutoUpdate = false) => {
-    if (!isAutoUpdate) setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        validator,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
-        limit: '50',
-        excludeBlacklisted: excludeBlacklisted.toString(),
-      });
-      
-      const response = await fetch(`/api/top-programs?${params}`);
-      const data = await response.json();
-      
-      if (response.ok && Array.isArray(data)) {
-        setPrograms(data);
-        setLastUpdate(new Date());
-        // Reset to first page when manually fetching new data
-        if (!isAutoUpdate) {
-          setCurrentProgramsPage(1);
-        }
-      } else {
-        console.error('API error:', data);
-        setPrograms([]);
-      }
-    } catch (error) {
-      console.error('Error fetching programs:', error);
-      setPrograms([]);
-    } finally {
-      if (!isAutoUpdate) setLoading(false);
-    }
-  };
-
-  const fetchProgramStats = async (programId: string, isAutoUpdate = false) => {
-    if (!isAutoUpdate) setStatsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        programId,
-        validator,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
-        by: 'hour',
-      });
-      
-      const response = await fetch(`/api/program-stats?${params}`);
-      const data = await response.json();
-      
-      if (response.ok && Array.isArray(data)) {
-        setProgramStats(data);
-      } else {
-        console.error('API error:', data);
-        setProgramStats([]);
-      }
-    } catch (error) {
-      console.error('Error fetching program stats:', error);
-      setProgramStats([]);
-    } finally {
-      if (!isAutoUpdate) setStatsLoading(false);
-    }
-  };
-
+  // Load validators list on mount
   useEffect(() => {
-    fetchPrograms();
-    setLastUpdate(new Date());
+    fetch('/validators.json')
+      .then(res => res.json())
+      .then(data => {
+        setValidatorsList(data);
+      })
+      .catch(err => console.error('Failed to load validators:', err));
   }, []);
 
-  useEffect(() => {
-    if (!isLiveMode) return;
+  // Filter validators based on search query
+  const filteredValidators = useMemo(() => {
+    if (!searchQuery) return [];
+    return validatorsList.filter(validator => 
+      validator.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      validator.vote_identity.toLowerCase().includes(searchQuery.toLowerCase())
+    ).slice(0, 5);
+  }, [searchQuery, validatorsList]);
 
-    let programsEventSource: EventSource;
-    let statsEventSource: EventSource;
-    
-    const connectProgramsStream = () => {
-      setConnectionStatus('connecting');
-      const params = new URLSearchParams({
-        validator,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
-        excludeBlacklisted: excludeBlacklisted.toString(),
+  // Fetch validator data
+  const fetchValidatorData = async (validatorPubkey: string) => {
+    setLoading(true);
+    try {
+      // Find validator info from validators.json
+      const info = validatorsList.find(v => v.vote_identity === validatorPubkey);
+      setValidatorInfo(info || null);
+
+      console.log('🚀 Fetching fresh data for validator:', validatorPubkey.slice(0, 8) + '...');
+      
+      // 1. Always fetch fresh data from Solana RPC first
+      try {
+        const fetchResponse = await fetch('/api/fetch-validator-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ validatorPubkey })
+        });
+        const fetchResult = await fetchResponse.json();
+        
+        if (fetchResponse.ok) {
+          console.log('✅ Fresh data fetch result:', fetchResult);
+        } else {
+          console.log('⚠️ Fresh data fetch failed:', fetchResult);
+        }
+      } catch (fetchError) {
+        console.error('❌ Error fetching fresh data:', fetchError);
+      }
+
+      // 2. Get program usage from database (last 24 hours)
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      // Format dates for ClickHouse (remove milliseconds and Z)
+      const fromDate = yesterday.toISOString().split('.')[0];
+      const toDate = now.toISOString().split('.')[0];
+      
+      console.log('🌐 Making API request to:', `/api/top-programs?validator=${validatorPubkey}&from=${fromDate}&to=${toDate}&limit=20&excludeBlacklisted=true`);
+      
+      const programsResponse = await fetch(`/api/top-programs?validator=${validatorPubkey}&from=${fromDate}&to=${toDate}&limit=20&excludeBlacklisted=true`);
+      console.log('📡 Response status:', programsResponse.status, programsResponse.statusText);
+      
+      const programsData = await programsResponse.json();
+      console.log('📥 Response received:', {
+        type: typeof programsData,
+        isArray: Array.isArray(programsData),
+        length: Array.isArray(programsData) ? programsData.length : 'N/A',
+        hasError: !!programsData.error
       });
       
-      programsEventSource = new EventSource(`/api/stream/programs?${params}`);
+      console.log('📊 Raw programs data received:', programsData);
       
-      programsEventSource.onopen = () => {
-        setConnectionStatus('connected');
-      };
-      
-      programsEventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (Array.isArray(data)) {
-            setPrograms(data);
-            setLastUpdate(new Date());
-            // Reset to first page when new data arrives in live mode
-            setCurrentProgramsPage(1);
-          }
-        } catch (error) {
-          console.error('Error parsing programs SSE data:', error);
-        }
-      };
-      
-      programsEventSource.onerror = () => {
-        setConnectionStatus('disconnected');
-        programsEventSource.close();
-        setTimeout(connectProgramsStream, 2000);
-      };
-    };
-    
-    const connectStatsStream = () => {
-      if (!selectedProgram) return;
-      
-      const params = new URLSearchParams({
-        programId: selectedProgram,
-        validator,
-        from: `${from}T00:00:00Z`,
-        to: `${to}T23:59:59Z`,
-      });
-      
-      statsEventSource = new EventSource(`/api/stream/program-stats?${params}`);
-      
-      statsEventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (Array.isArray(data)) {
-            setProgramStats(data);
-          }
-        } catch (error) {
-          console.error('Error parsing stats SSE data:', error);
-        }
-      };
-      
-      statsEventSource.onerror = () => {
-        statsEventSource.close();
-        setTimeout(connectStatsStream, 2000);
-      };
-    };
-    
-    connectProgramsStream();
-    if (selectedProgram) {
-      connectStatsStream();
-    }
-    
-    return () => {
-      if (programsEventSource) programsEventSource.close();
-      if (statsEventSource) statsEventSource.close();
-    };
-  }, [isLiveMode, selectedProgram, validator, from, to, excludeBlacklisted]);
+      if (Array.isArray(programsData) && programsData.length > 0) {
+        // Ensure cnt values are numbers (might come as strings from ClickHouse)
+        const normalizedData = programsData.map(p => ({
+          ...p,
+          cnt: typeof p.cnt === 'string' ? parseInt(p.cnt, 10) : p.cnt
+        }));
+        
+        const total = normalizedData.reduce((sum, p) => sum + p.cnt, 0);
+        console.log('📊 Program usage calculation:', {
+          validator: validatorPubkey.slice(0, 8) + '...',
+          total,
+          programs: normalizedData.length,
+          rawData: normalizedData.slice(0, 5),
+          top3: normalizedData.slice(0, 3).map(p => ({ 
+            id: p.program_id.slice(0, 8), 
+            cnt: p.cnt, 
+            type: typeof p.cnt,
+            percent: total > 0 ? (p.cnt / total * 100).toFixed(2) + '%' : '0%'
+          }))
+        });
+        
+        const usageWithPercentages = normalizedData.map(p => ({
+          ...p,
+          percentage: total > 0 ? (p.cnt / total * 100) : 0
+        }));
+        
+        console.log('📊 Final usage with percentages:', usageWithPercentages.slice(0, 3));
+        setProgramUsage(usageWithPercentages);
+      } else if (Array.isArray(programsData) && programsData.length === 0) {
+        console.log('📊 No data for this validator, showing suggestion to try a different validator');
+        setProgramUsage([]);
+        
+        // Show helpful message in the UI about trying a different validator
+        setValidatorInfo(prev => prev ? {
+          ...prev,
+          name: prev.name + ' (No Recent Activity)',
+          description: 'This validator has not been a leader recently and has no program usage data to display. Try searching for a different validator.'
+        } : null);
+      } else {
+        console.log('❌ Programs data is not an array:', typeof programsData, programsData);
+        setProgramUsage([]);
+      }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchPrograms();
-    if (selectedProgram) {
-      fetchProgramStats(selectedProgram);
-    }
-  };
-
-  const toggleLiveMode = () => {
-    setIsLiveMode(!isLiveMode);
-    if (!isLiveMode) {
       setLastUpdate(new Date());
+    } catch (error) {
+      console.error('Error fetching validator data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleProgramClick = (programId: string) => {
-    setSelectedProgram(programId);
-    fetchProgramStats(programId);
+
+  // Auto-refresh data every 30 seconds when a validator is selected
+  useEffect(() => {
+    if (!selectedValidator) return;
+
+    const interval = setInterval(() => {
+      fetchValidatorData(selectedValidator);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [selectedValidator]);
+
+  const handleValidatorSelect = (validator: ValidatorInfo) => {
+    setSelectedValidator(validator.vote_identity);
+    setSearchQuery(validator.name);
+    fetchValidatorData(validator.vote_identity);
+  };
+
+  const handleManualSearch = () => {
+    if (searchQuery.length >= 40) { // Likely a pubkey
+      setSelectedValidator(searchQuery);
+      fetchValidatorData(searchQuery);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header Navigation */}
-      <HeaderNav />
-      
-      <div className="container mx-auto p-6 max-w-7xl">
-        {/* Program Categories Dropdown */}
-        <div className="mb-6">
-          <CategoryLegend isDropdown={true} />
+    <div className="min-h-screen bg-gray-950 text-white">
+      {/* Header */}
+      <div className="bg-gray-900 border-b border-gray-800">
+        <div className="container mx-auto px-6 py-8">
+          <h1 className="text-3xl font-bold text-center mb-2">Solana Validator Explorer</h1>
+          <p className="text-gray-400 text-center">Search validators and explore their program usage patterns</p>
         </div>
-      
-      <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg mb-8 border border-border shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">From Date</label>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">To Date</label>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Validator</label>
+      </div>
+
+      <div className="container mx-auto px-6 py-8 max-w-6xl">
+        {/* Search Section */}
+        <div className="mb-8">
+          <div className="relative max-w-2xl mx-auto">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              value={validator}
-              onChange={(e) => setValidator(e.target.value)}
-              placeholder="all or validator pubkey"
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-ring focus:outline-none focus-ring"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+              placeholder="Search validators by name or paste validator pubkey..."
+              className="w-full pl-12 pr-4 py-4 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
-          </div>
-          
-          <div className="flex items-end">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={excludeBlacklisted}
-                onChange={(e) => setExcludeBlacklisted(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm">Exclude Blacklisted</span>
-            </label>
-          </div>
-        </div>
-        
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            className="px-6 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-          >
-            Search
-          </button>
-          <button
-            type="button"
-            onClick={toggleLiveMode}
-            className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-              isLiveMode 
-                ? 'bg-success hover:bg-success/90 text-white' 
-                : 'bg-secondary hover:bg-secondary/90 text-secondary-foreground'
-            }`}
-          >
-            <div className={`w-2 h-2 rounded-full ${
-              isLiveMode 
-                ? connectionStatus === 'connected' 
-                  ? 'bg-white animate-pulse' 
-                  : connectionStatus === 'connecting'
-                  ? 'bg-yellow-300 animate-spin'
-                  : 'bg-red-300'
-                : 'bg-muted-foreground'
-            }`}></div>
-            {isLiveMode 
-              ? connectionStatus === 'connected' 
-                ? 'Live Stream ON' 
-                : connectionStatus === 'connecting'
-                ? 'Connecting...'
-                : 'Stream Error'
-              : 'Enable Live Stream'
-            }
-          </button>
-        </div>
-      </form>
-
-      {isLiveMode && lastUpdate && connectionStatus === 'connected' && (
-        <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
-          <div className="flex items-center gap-2 text-success text-sm">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            Real-time SSE stream active • Last updated: {lastUpdate.toLocaleTimeString()}
-          </div>
-        </div>
-      )}
-      
-      {isLiveMode && connectionStatus === 'connecting' && (
-        <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
-          <div className="flex items-center gap-2 text-yellow-300 text-sm">
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin"></div>
-            Connecting to real-time stream...
-          </div>
-        </div>
-      )}
-      
-      {isLiveMode && connectionStatus === 'disconnected' && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg">
-          <div className="flex items-center gap-2 text-red-300 text-sm">
-            <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-            Stream disconnected • Attempting to reconnect...
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Top Programs</h2>
-            {programs.length > 0 && (
-              <span className="text-sm text-muted-foreground">
-                Page {currentProgramsPage} of {Math.ceil(programs.length / programsPerPage)}
-              </span>
+            
+            {/* Search Suggestions */}
+            {filteredValidators.length > 0 && searchQuery && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10">
+                {filteredValidators.map((validator) => (
+                  <button
+                    key={validator.vote_identity}
+                    onClick={() => handleValidatorSelect(validator)}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg border-b border-gray-700 last:border-b-0"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {validator.image && (
+                        <img 
+                          src={validator.image} 
+                          alt={validator.name}
+                          className="w-8 h-8 rounded-full"
+                        />
+                      )}
+                      <div>
+                        <div className="font-medium">{validator.name}</div>
+                        <div className="text-sm text-gray-400">{validator.vote_identity.slice(0, 12)}...</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
-          <div className="bg-card rounded-lg overflow-hidden border border-border">
-            {loading ? (
-              <div className="p-8 text-center text-muted-foreground">Loading...</div>
-            ) : programs.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">No programs found</div>
-            ) : (
-              <>
-                <table className="w-full">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Program</th>
-                      <th className="px-4 py-3 text-right">Invocations</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const startIndex = (currentProgramsPage - 1) * programsPerPage;
-                      const endIndex = startIndex + programsPerPage;
-                      const paginatedPrograms = programs.slice(startIndex, endIndex);
-                      
-                      return paginatedPrograms.map((program) => (
-                        <tr
-                          key={program.program_id}
-                          className={`border-t border-border hover:bg-muted/50 cursor-pointer transition-colors ${
-                            selectedProgram === program.program_id ? 'bg-muted' : ''
-                          }`}
-                          onClick={() => handleProgramClick(program.program_id)}
-                        >
-                          <td className="px-4 py-3">
-                            <ProgramTag 
-                              programId={program.program_id}
-                              onClick={() => handleProgramClick(program.program_id)}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold">
-                            {program.cnt.toLocaleString()}
-                          </td>
-                        </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
-                
-                {/* Pagination Controls */}
-                {Math.ceil(programs.length / programsPerPage) > 1 && (
-                  <div className="p-4 bg-muted/30 border-t border-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCurrentProgramsPage(1)}
-                        disabled={currentProgramsPage === 1}
-                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        First
-                      </button>
-                      <button
-                        onClick={() => setCurrentProgramsPage(Math.max(1, currentProgramsPage - 1))}
-                        disabled={currentProgramsPage === 1}
-                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Previous
-                      </button>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Go to page:</span>
-                      <select
-                        value={currentProgramsPage}
-                        onChange={(e) => setCurrentProgramsPage(Number(e.target.value))}
-                        className="px-2 py-1 text-sm bg-muted border border-border rounded focus:border-ring focus:outline-none"
-                      >
-                        {Array.from({ length: Math.ceil(programs.length / programsPerPage) }, (_, i) => (
-                          <option key={i + 1} value={i + 1}>
-                            {i + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCurrentProgramsPage(Math.min(Math.ceil(programs.length / programsPerPage), currentProgramsPage + 1))}
-                        disabled={currentProgramsPage === Math.ceil(programs.length / programsPerPage)}
-                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Next
-                      </button>
-                      <button
-                        onClick={() => setCurrentProgramsPage(Math.ceil(programs.length / programsPerPage))}
-                        disabled={currentProgramsPage === Math.ceil(programs.length / programsPerPage)}
-                        className="px-3 py-1 text-sm bg-secondary text-secondary-foreground rounded hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Last
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">
-              {selectedProgram ? 'Program Timeline' : 'Select a Program'}
-            </h2>
-            <div className="flex items-center gap-3">
-              {selectedProgram && isLiveMode && connectionStatus === 'connected' && (
-                <span className="text-xs text-muted-foreground">Live</span>
-              )}
-              {selectedProgram && (
-                <button
-                  onClick={() => setSelectedProgram(null)}
-                  className="px-3 py-1 bg-muted hover:bg-secondary text-foreground rounded text-sm transition-colors flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" />
-                  Close
-                </button>
-              )}
+          {searchQuery.length >= 40 && !filteredValidators.length && (
+            <div className="text-center mt-4">
+              <button
+                onClick={handleManualSearch}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Search Validator
+              </button>
             </div>
+          )}
+        </div>
+
+        {loading && (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <div className="text-gray-400">Loading validator data...</div>
           </div>
-          <div className="bg-card rounded-lg overflow-hidden border border-border">
-            {!selectedProgram ? (
-              <div className="text-center text-muted-foreground py-12">
-                <BarChart3 className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <div className="text-lg mb-2">Program Timeline</div>
-                <div className="text-sm">Click on a program to view its activity timeline</div>
-              </div>
-            ) : statsLoading ? (
-              <div className="text-center text-muted-foreground py-12">
-                <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-spin" />
-                <div className="text-lg">Loading timeline...</div>
-              </div>
-            ) : (
-              <div>
-                {/* Header with program info and stats */}
-                <div className="bg-muted p-4 border-b border-border">
-                  <div className="flex items-center justify-between mb-3">
-                    <ProgramTag 
-                      programId={selectedProgram}
-                      showFullId={true}
+        )}
+
+        {selectedValidator && !loading && (
+          <>
+            {/* Validator Info Card */}
+            {validatorInfo && (
+              <div className="bg-gray-800 rounded-lg p-6 mb-8 border border-gray-700">
+                <div className="flex items-start space-x-4">
+                  {validatorInfo.image && (
+                    <img 
+                      src={validatorInfo.image} 
+                      alt={validatorInfo.name}
+                      className="w-16 h-16 rounded-full"
                     />
-                  </div>
-                  
-                  {/* Quick stats */}
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="text-center min-w-0">
-                      <div className="text-lg font-bold text-primary truncate">
-                        {(() => {
-                          const total = programStats.reduce((sum, stat) => sum + (stat.cnt || 0), 0);
-                          if (total >= 1000000) return `${(total / 1000000).toFixed(1)}M`;
-                          if (total >= 1000) return `${(total / 1000).toFixed(1)}K`;
-                          return total.toLocaleString();
-                        })()}
-                      </div>
-                      <div className="text-muted-foreground text-xs">Total Invocations</div>
-                    </div>
-                    <div className="text-center min-w-0">
-                      <div className="text-lg font-bold text-success truncate">
-                        {programStats.length}
-                      </div>
-                      <div className="text-muted-foreground text-xs">Data Points</div>
-                    </div>
-                    <div className="text-center min-w-0">
-                      <div className="text-lg font-bold text-white truncate">
-                        {(() => {
-                          const peak = programStats.length > 0 ? Math.max(...programStats.map(s => s.cnt || 0)) : 0;
-                          if (peak >= 1000000) return `${(peak / 1000000).toFixed(1)}M`;
-                          if (peak >= 1000) return `${(peak / 1000).toFixed(1)}K`;
-                          return peak.toLocaleString();
-                        })()}
-                      </div>
-                      <div className="text-foreground text-xs">Peak Hour</div>
+                  )}
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold mb-2">{validatorInfo.name}</h2>
+                    <p className="text-gray-400 mb-4">{validatorInfo.description}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      {validatorInfo.commission !== undefined && (
+                        <div>
+                          <div className="text-gray-400">Commission</div>
+                          <div className="font-semibold">{validatorInfo.commission}%</div>
+                        </div>
+                      )}
+                      {validatorInfo.apy_estimate && (
+                        <div>
+                          <div className="text-gray-400">APY</div>
+                          <div className="font-semibold text-green-400">{validatorInfo.apy_estimate.toFixed(2)}%</div>
+                        </div>
+                      )}
+                      {validatorInfo.ip_city && (
+                        <div>
+                          <div className="text-gray-400">Location</div>
+                          <div className="font-semibold">{validatorInfo.ip_city}, {validatorInfo.ip_country}</div>
+                        </div>
+                      )}
+                      {validatorInfo.activated_stake && (
+                        <div>
+                          <div className="text-gray-400">Stake</div>
+                          <div className="font-semibold">{(validatorInfo.activated_stake / 1000).toFixed(0)}K SOL</div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Chart section */}
-                <div className="p-4">
-                  {programStats.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      <TrendingUp className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                      <div className="text-lg mb-2">No Data Available</div>
-                      <div className="text-sm">No activity found for this program in the selected time range</div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="mb-4">
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Activity Timeline</h3>
-                        <div className="text-xs text-muted-foreground">
-                          Showing activity from {new Date(programStats[0]?.ts).toLocaleDateString()} to {new Date(programStats[programStats.length - 1]?.ts).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="bg-secondary rounded-lg p-4 overflow-hidden">
-                        <div className="w-full max-w-full">
-                          <LineChart data={programStats} width={650} height={300} />
-                        </div>
-                      </div>
-                      
-                      {/* Recent activity table */}
-                      {programStats.length > 0 && (
-                        <div className="mt-6">
-                          <h3 className="text-sm font-medium text-muted-foreground mb-3">Recent Activity</h3>
-                          <div className="bg-secondary rounded-lg overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead className="bg-muted">
-                                <tr>
-                                  <th className="px-4 py-2 text-left">Time</th>
-                                  <th className="px-4 py-2 text-right">Invocations</th>
-                                  <th className="px-4 py-2 text-right">Activity Level</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {programStats.slice(-5).reverse().map((stat, i) => {
-                                  const maxCnt = Math.max(...programStats.map(s => s.cnt || 0));
-                                  const percentage = maxCnt > 0 ? ((stat.cnt || 0) / maxCnt * 100) : 0;
-                                  return (
-                                    <tr key={i} className="border-t border-border">
-                                      <td className="px-4 py-2 text-foreground">
-                                        {new Date(stat.ts).toLocaleString()}
-                                      </td>
-                                      <td className="px-4 py-2 text-right font-mono text-primary">
-                                        {(stat.cnt || 0).toLocaleString()}
-                                      </td>
-                                      <td className="px-4 py-2 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                          <div className="w-16 bg-muted rounded-full h-2">
-                                            <div 
-                                              className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                                              style={{ width: `${percentage}%` }}
-                                            />
-                                          </div>
-                                          <span className="text-xs text-muted-foreground w-8">
-                                            {percentage.toFixed(0)}%
-                                          </span>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
+            {/* Program Usage */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 max-w-4xl mx-auto">
+              <div className="p-6 border-b border-gray-700">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold flex items-center">
+                    <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
+                    Program Usage (24h)
+                  </h3>
+                  {lastUpdate && (
+                    <div className="text-sm text-gray-400">
+                      Updated: {lastUpdate.toLocaleTimeString()}
                     </div>
                   )}
                 </div>
               </div>
-            )}
+              <div className="p-6">
+                {programUsage.length === 0 ? (
+                  <div className="text-center text-gray-400 py-8">
+                    No program usage data available
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {programUsage.map((program) => {
+                      const programInfo = getProgramInfo(program.program_id);
+                      return (
+                        <div key={program.program_id} className="flex items-center justify-between p-3 rounded-lg">
+                          <div className="flex-1 min-w-0 mr-4">
+                            <ProgramTag programId={program.program_id} />
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-32 bg-gray-700 rounded-full h-2">
+                              <div 
+                                className="h-2 rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${program.percentage}%`,
+                                  backgroundColor: (() => {
+                                    const colorMap: Record<string, string> = {
+                                      'text-blue-400': '#60a5fa',
+                                      'text-emerald-400': '#34d399',
+                                      'text-red-400': '#f87171',
+                                      'text-purple-400': '#c084fc',
+                                      'text-orange-400': '#fb923c',
+                                      'text-pink-400': '#f472b6',
+                                      'text-cyan-400': '#22d3ee',
+                                      'text-yellow-400': '#facc15',
+                                      'text-gray-400': '#9ca3af',
+                                      'text-slate-400': '#94a3b8'
+                                    };
+                                    return colorMap[programInfo.color] || '#9ca3af';
+                                  })()
+                                }}
+                              />
+                            </div>
+                            <div className="text-sm font-semibold w-16 text-right">
+                              {program.percentage.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-gray-400 w-20 text-right">
+                              {program.cnt.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Auto-refresh indicator */}
+            <div className="mt-8 text-center">
+              <div className="inline-flex items-center px-3 py-1 bg-green-900/30 border border-green-500/30 rounded-full text-sm text-green-400">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse mr-2"></div>
+                Auto-refreshing every 30 seconds
+              </div>
+            </div>
+          </>
+        )}
+
+        {!selectedValidator && !loading && (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <h2 className="text-xl font-semibold mb-2 text-gray-400">Search for a Validator</h2>
+            <p className="text-gray-500">Enter a validator name or paste a validator pubkey to get started</p>
           </div>
-        </div>
+        )}
       </div>
-    </div>
     </div>
   );
 }

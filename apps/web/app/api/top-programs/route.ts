@@ -93,6 +93,53 @@ export async function GET(request: NextRequest) {
     });
 
     const data = await result.json() as any[];
+    
+    console.log('📊 Top programs query result:', {
+      validator: validator.slice(0, 8) + '...',
+      from,
+      to,
+      dataLength: data.length,
+      firstFew: data.slice(0, 3).map(d => ({ program_id: d.program_id.slice(0, 8) + '...', cnt: d.cnt }))
+    });
+    
+    // Debug: if no data and we're looking at specific validator, check what validators we have
+    if (data.length === 0 && validator !== 'all') {
+      console.log('🔍 No data for validator, checking available validators...');
+      const validatorCheckQuery = `
+        SELECT validator, count(*) as cnt 
+        FROM ${env.CLICKHOUSE_DB}.program_invocations 
+        WHERE block_time >= now() - INTERVAL 24 HOUR
+        GROUP BY validator 
+        ORDER BY cnt DESC 
+        LIMIT 10
+      `;
+      
+      const validatorResult = await client.query({
+        query: validatorCheckQuery,
+        query_params: {},
+        format: 'JSONEachRow',
+      });
+      
+      const validatorData = await validatorResult.json() as any[];
+      console.log('📊 Top 10 active validators in last 24 hours:', validatorData);
+      
+      // Also check what data exists for this specific validator
+      const specificValidatorQuery = `
+        SELECT count(*) as total_rows, min(block_time) as earliest, max(block_time) as latest
+        FROM ${env.CLICKHOUSE_DB}.program_invocations 
+        WHERE validator = {validator:String}
+      `;
+      
+      const specificResult = await client.query({
+        query: specificValidatorQuery,
+        query_params: { validator },
+        format: 'JSONEachRow',
+      });
+      
+      const specificData = await specificResult.json() as any[];
+      console.log('📊 Data for specific validator:', specificData[0]);
+    }
+    
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching top programs:', error);
