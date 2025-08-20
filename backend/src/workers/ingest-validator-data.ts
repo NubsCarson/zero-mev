@@ -12,6 +12,7 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
     let startSlot = currentSlot;
     
     // Calculate slots based on time range (approximately 400ms per slot)
+    // Limit to recent blocks to avoid cleaned up data
     switch(timeRange) {
       case '1h':
         startSlot = currentSlot - 9000;
@@ -20,13 +21,13 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
         startSlot = currentSlot - 54000;
         break;
       case '24h':
-        startSlot = currentSlot - 216000;
+        startSlot = currentSlot - 9000; // Use 1h of recent data only
         break;
       case '7d':
-        startSlot = currentSlot - 1512000;
+        startSlot = currentSlot - 9000; // Use 1h of recent data only
         break;
       case '30d':
-        startSlot = currentSlot - 6480000;
+        startSlot = currentSlot - 9000; // Use 1h of recent data only
         break;
     }
     
@@ -46,7 +47,7 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
     console.log(`📦 Found ${validatorSlots.length} slots for validator`);
     
     let processedCount = 0;
-    const batchSize = 10;
+    const batchSize = 3; // Reduce batch size to avoid rate limiting
     
     for (let i = 0; i < validatorSlots.length; i += batchSize) {
       const batch = validatorSlots.slice(i, i + batchSize);
@@ -72,11 +73,20 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                 const message = tx.transaction.message;
                 const programIds = new Set<string>();
                 
-                // Get program IDs from instructions
+                // Get program IDs from instructions - handle both legacy and versioned transactions
                 if ('compiledInstructions' in message) {
+                  // Versioned transaction format
                   for (const inst of message.compiledInstructions) {
                     if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
                       const programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
+                      programIds.add(programId);
+                    }
+                  }
+                } else if ('instructions' in message) {
+                  // Legacy transaction format
+                  for (const inst of message.instructions) {
+                    if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
+                      const programId = message.accountKeys[inst.programIdIndex].toBase58();
                       programIds.add(programId);
                     }
                   }
@@ -86,9 +96,17 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                 if (tx.meta.innerInstructions) {
                   for (const inner of tx.meta.innerInstructions) {
                     for (const inst of inner.instructions) {
-                      if ('programIdIndex' in inst && message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
-                        const programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
-                        programIds.add(programId);
+                      if ('programIdIndex' in inst) {
+                        let programId = null;
+                        // Try both account key formats
+                        if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
+                          programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
+                        } else if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
+                          programId = message.accountKeys[inst.programIdIndex].toBase58();
+                        }
+                        if (programId) {
+                          programIds.add(programId);
+                        }
                       }
                     }
                   }
@@ -106,20 +124,8 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
               }
             }
             
-            // Insert block data
+            // Only store blocks that contain vote transactions (every validator block should have these)
             const blockTime = block.blockTime ? new Date(block.blockTime * 1000) : new Date();
-            
-            await clickHouseManager.insertBlock({
-              slot,
-              hash: block.blockhash,
-              parentHash: block.previousBlockhash,
-              validatorIdentity,
-              timestamp: blockTime,
-              transactionCount: block.transactions.length,
-              totalCuConsumed: totalCU
-            });
-            
-            // Insert program usage data
             const programUsageData = Array.from(programStats.entries()).map(([programId, stats]) => ({
               slot,
               validatorIdentity,
@@ -129,7 +135,28 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
               timestamp: blockTime
             }));
             
-            if (programUsageData.length > 0) {
+            // Check if block contains vote transactions (it should for every validator block)
+            const hasVoteTransactions = programStats.has('Vote111111111111111111111111111111111111111');
+            
+            // Debug: Log if no vote transactions found (this shouldn't happen)
+            if (!hasVoteTransactions) {
+              console.log(`⚠️ Block ${slot} for validator ${validatorIdentity} has no vote transactions! Programs found:`, Array.from(programStats.keys()));
+            }
+            
+            if (hasVoteTransactions && programUsageData.length > 0) {
+              // Insert block data only if we have program usage
+              
+              await clickHouseManager.insertBlock({
+                slot,
+                hash: block.blockhash,
+                parentHash: block.previousBlockhash,
+                validatorIdentity,
+                timestamp: blockTime,
+                transactionCount: block.transactions.length,
+                totalCuConsumed: totalCU
+              });
+              
+              // Insert program usage data
               await clickHouseManager.insertProgramUsage(programUsageData);
             }
             
@@ -142,6 +169,11 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
           console.error(`Error processing slot ${slot}:`, error);
         }
       }));
+      
+      // Add delay between batches to avoid rate limiting
+      if (i + batchSize < validatorSlots.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
     
     console.log(`✅ Successfully ingested ${processedCount} blocks for validator ${validatorIdentity}`);

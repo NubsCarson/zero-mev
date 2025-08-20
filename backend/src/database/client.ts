@@ -107,7 +107,7 @@ export class ClickHouseManager {
       query: `
         SELECT 
           validator_identity,
-          count() as blocks_produced,
+          count(DISTINCT slot) as blocks_produced,
           sum(transaction_count) as total_transactions,
           sum(total_cu_consumed) as total_cu_consumed,
           avg(transaction_count) as avg_transactions_per_block
@@ -160,7 +160,7 @@ export class ClickHouseManager {
       query: `
         SELECT 
           validator_identity,
-          count() as blocks_produced,
+          count(DISTINCT slot) as blocks_produced,
           sum(transaction_count) as total_transactions,
           sum(total_cu_consumed) as total_cu_consumed
         FROM blocks 

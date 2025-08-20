@@ -10,16 +10,16 @@ import { useBlacklist } from '@/contexts/BlacklistContext';
 
 interface ComparisonData {
   program_id: string;
-  validator1_invocations: number;
-  validator1_percentage: number;
+  validator1_invocations: number; // Actually blocks_used for display
+  validator1_percentage: number; // Block coverage percentage
   validator1_cu: number;
   validator1_blocks: number;
-  validator2_invocations: number;
-  validator2_percentage: number;
+  validator2_invocations: number; // Actually blocks_used for display
+  validator2_percentage: number; // Block coverage percentage
   validator2_cu: number;
   validator2_blocks: number;
-  difference_invocations: number;
-  difference_percentage: number;
+  difference_invocations: number; // Actually blocks difference
+  difference_percentage: number; // Block coverage percentage difference
 }
 
 export default function ComparePage() {
@@ -208,17 +208,17 @@ export default function ComparePage() {
   const createComparisonData = (): ComparisonData[] => {
     const programMap = new Map<string, ComparisonData>();
     
-    // Calculate total invocations for each validator
-    const validator1TotalInvocations = validator1Programs.reduce((sum, p) => sum + Number(p.total_invocations), 0);
-    const validator2TotalInvocations = validator2Programs.reduce((sum, p) => sum + Number(p.total_invocations), 0);
+    // Calculate total blocks for each validator for percentage calculation
+    const validator1TotalBlocks = validator1Stats?.blocks_produced || 0;
+    const validator2TotalBlocks = validator2Stats?.blocks_produced || 0;
     
     // Add validator1 programs
     validator1Programs.forEach(program => {
-      const percentage = validator1TotalInvocations > 0 ? (Number(program.total_invocations) / validator1TotalInvocations) * 100 : 0;
+      const blockCoverage = validator1TotalBlocks > 0 ? (Number(program.blocks_used) / validator1TotalBlocks) * 100 : 0;
       programMap.set(program.program_id, {
         program_id: program.program_id,
-        validator1_invocations: Number(program.total_invocations),
-        validator1_percentage: percentage,
+        validator1_invocations: Number(program.blocks_used), // Now represents blocks used
+        validator1_percentage: blockCoverage,
         validator1_cu: Number(program.total_cu_consumed),
         validator1_blocks: Number(program.blocks_used),
         validator2_invocations: 0,
@@ -232,11 +232,11 @@ export default function ComparePage() {
     
     // Add validator2 programs
     validator2Programs.forEach(program => {
-      const percentage = validator2TotalInvocations > 0 ? (Number(program.total_invocations) / validator2TotalInvocations) * 100 : 0;
+      const blockCoverage = validator2TotalBlocks > 0 ? (Number(program.blocks_used) / validator2TotalBlocks) * 100 : 0;
       const existing = programMap.get(program.program_id);
       if (existing) {
-        existing.validator2_invocations = Number(program.total_invocations);
-        existing.validator2_percentage = percentage;
+        existing.validator2_invocations = Number(program.blocks_used); // Now represents blocks used
+        existing.validator2_percentage = blockCoverage;
         existing.validator2_cu = Number(program.total_cu_consumed);
         existing.validator2_blocks = Number(program.blocks_used);
       } else {
@@ -246,8 +246,8 @@ export default function ComparePage() {
           validator1_percentage: 0,
           validator1_cu: 0,
           validator1_blocks: 0,
-          validator2_invocations: Number(program.total_invocations),
-          validator2_percentage: percentage,
+          validator2_invocations: Number(program.blocks_used), // Now represents blocks used
+          validator2_percentage: blockCoverage,
           validator2_cu: Number(program.total_cu_consumed),
           validator2_blocks: Number(program.blocks_used),
           difference_invocations: 0,
@@ -259,7 +259,7 @@ export default function ComparePage() {
     // Calculate differences and sort by total usage
     const comparisonData = Array.from(programMap.values()).map(item => ({
       ...item,
-      difference_invocations: item.validator1_invocations - item.validator2_invocations,
+      difference_invocations: item.validator1_invocations - item.validator2_invocations, // Now blocks difference
       difference_percentage: item.validator1_percentage - item.validator2_percentage,
     }));
     
@@ -385,14 +385,6 @@ export default function ComparePage() {
                   <p className="text-xl font-bold text-white">{formatNumber(validator1Stats.blocks_produced)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Transactions</p>
-                  <p className="text-xl font-bold text-white">{formatNumber(validator1Stats.total_transactions)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400 text-sm">Compute Units</p>
-                  <p className="text-lg font-bold text-white">{formatNumber(validator1Stats.total_cu_consumed)}</p>
-                </div>
-                <div>
                   <p className="text-gray-400 text-sm">Programs</p>
                   <p className="text-lg font-bold text-white">{validator1Programs.length}</p>
                 </div>
@@ -414,14 +406,6 @@ export default function ComparePage() {
                 <div>
                   <p className="text-gray-400 text-sm">Blocks</p>
                   <p className="text-xl font-bold text-white">{formatNumber(validator2Stats.blocks_produced)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400 text-sm">Transactions</p>
-                  <p className="text-xl font-bold text-white">{formatNumber(validator2Stats.total_transactions)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400 text-sm">Compute Units</p>
-                  <p className="text-lg font-bold text-white">{formatNumber(validator2Stats.total_cu_consumed)}</p>
                 </div>
                 <div>
                   <p className="text-gray-400 text-sm">Programs</p>

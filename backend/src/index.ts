@@ -35,20 +35,28 @@ async function main() {
           }
           const analysis = programAnalyzer.analyzeBlock(blockData.transactions);
           
-          // Store block metadata
-          await clickHouseManager.insertBlock({
-            slot: blockData.slot,
-            hash: blockData.hash,
-            parentHash: blockData.parentHash,
-            timestamp: blockData.timestamp,
-            validatorIdentity: blockData.validatorIdentity,
-            transactionCount: blockData.transactions.length,
-            totalInstructions: analysis.totalInstructions,
-            totalCuConsumed: analysis.totalCuConsumed,
-          });
+          // Only store blocks that contain vote transactions (every validator block should have these)
+          const hasVoteTransactions = analysis.programUsage.some(program => program.programId === 'Vote111111111111111111111111111111111111111');
+          
+          // Debug: Log if no vote transactions found (this shouldn't happen)
+          if (!hasVoteTransactions) {
+            console.log(`⚠️ Block ${blockData.slot} for validator ${blockData.validatorIdentity} has no vote transactions! Programs found:`, analysis.programUsage.map(p => p.programId));
+          }
+          
+          if (hasVoteTransactions && analysis.programUsage.length > 0) {
+            // Store block metadata only if we have vote transactions
+            await clickHouseManager.insertBlock({
+              slot: blockData.slot,
+              hash: blockData.hash,
+              parentHash: blockData.parentHash,
+              timestamp: blockData.timestamp,
+              validatorIdentity: blockData.validatorIdentity,
+              transactionCount: blockData.transactions.length,
+              totalInstructions: analysis.totalInstructions,
+              totalCuConsumed: analysis.totalCuConsumed,
+            });
 
-          // Store program usage data
-          if (analysis.programUsage.length > 0) {
+            // Store program usage data
             const programUsageData = analysis.programUsage.map(program => ({
               slot: blockData.slot,
               validatorIdentity: blockData.validatorIdentity,

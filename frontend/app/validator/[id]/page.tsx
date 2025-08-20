@@ -444,14 +444,6 @@ export default function ValidatorPage() {
             </div>
             <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
               <div>
-                <p className="text-gray-400 text-sm">Compute Units</p>
-                <p className="text-2xl font-bold text-white">
-                  {formatNumber(stats?.total_cu_consumed || 0)}
-                </p>
-              </div>
-            </div>
-            <div className="bg-gray-900 rounded-md p-4 border border-gray-800">
-              <div>
                 <p className="text-gray-400 text-sm">Unique Programs</p>
                 <p className="text-2xl font-bold text-white">{programs.length}</p>
                 {apiPollingInterval && (
@@ -518,12 +510,9 @@ export default function ValidatorPage() {
           <div className="px-6 py-4 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">Program Invocations</h2>
+                <h2 className="text-lg font-semibold text-white">Program Block Coverage</h2>
                 <p className="text-sm text-gray-400">
-                  Sorted by {sortField === 'program' ? 'program name' : 
-                           sortField === 'invocations' ? 'invocation count' :
-                           sortField === 'percentage' ? 'percentage' :
-                           sortField === 'computeUnits' ? 'compute units' : 'blocks used'} ({sortDirection === 'desc' ? 'high to low' : 'low to high'}) • Showing {filteredAndSortedPrograms.length} of {programs.length} programs
+                  Sorted by {sortField === 'program' ? 'program name' : 'block coverage'} ({sortDirection === 'desc' ? 'high to low' : 'low to high'}) • Showing {filteredAndSortedPrograms.length} of {programs.length} programs
                 </p>
               </div>
               <div className="flex items-center space-x-3">
@@ -572,10 +561,7 @@ export default function ValidatorPage() {
                 <thead className="bg-gray-800">
                   <tr>
                     <SortableHeader field="program">Program</SortableHeader>
-                    <SortableHeader field="invocations">Invocations</SortableHeader>
-                    <SortableHeader field="percentage">Percentage</SortableHeader>
-                    <SortableHeader field="computeUnits">Compute Units</SortableHeader>
-                    <SortableHeader field="blocksUsed">Blocks Used</SortableHeader>
+                    <SortableHeader field="blocksUsed">Block Coverage</SortableHeader>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
@@ -583,7 +569,6 @@ export default function ValidatorPage() {
                     const isKnown = isProgramKnown(program.program_id);
                     const programName = getProgramName(program.program_id);
                     const colorClass = getProgramColor(program.program_id);
-                    const percentage = calculatePercentage(program, programs);
                     
                     return (
                       <tr key={program.program_id} className="hover:bg-gray-800 transition-colors">
@@ -614,30 +599,19 @@ export default function ValidatorPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white font-semibold">
-                            {formatNumber(program.total_invocations)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="text-sm text-white">
-                              {formatPercentage(percentage)}
+                            <div className="text-sm text-white font-semibold">
+                              {formatPercentage(calculateBlocksPercentage(program))}
                             </div>
-                            <div className="ml-2 flex-1 max-w-[100px]">
+                            <div className="ml-3 flex-1 max-w-[120px]">
                               <div className="bg-gray-800 rounded-full h-2">
                                 <div 
                                   className={`h-2 rounded-full ${colorClass}`}
-                                  style={{ width: `${Math.min(percentage, 100)}%` }}
+                                  style={{ width: `${Math.min(calculateBlocksPercentage(program), 100)}%` }}
                                 />
                               </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatNumber(program.total_cu_consumed)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatPercentage(calculateBlocksPercentage(program))}
                         </td>
                       </tr>
                     );
