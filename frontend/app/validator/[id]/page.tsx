@@ -258,6 +258,12 @@ export default function ValidatorPage() {
     return totalInvocations > 0 ? (Number(program.total_invocations) / totalInvocations) * 100 : 0;
   };
 
+  // Calculate blocks used percentage based on validator's total blocks produced
+  const calculateBlocksPercentage = (program: ProgramUsage) => {
+    const validatorTotalBlocks = Number(stats?.blocks_produced || 0);
+    return validatorTotalBlocks > 0 ? (Number(program.blocks_used) / validatorTotalBlocks) * 100 : 0;
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -288,7 +294,7 @@ export default function ValidatorPage() {
       case 'computeUnits':
         return Number(program.total_cu_consumed);
       case 'blocksUsed':
-        return Number(program.blocks_used);
+        return calculateBlocksPercentage(program);
       default:
         return 0;
     }
@@ -631,7 +637,7 @@ export default function ValidatorPage() {
                           {formatNumber(program.total_cu_consumed)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatNumber(program.blocks_used)}
+                          {formatPercentage(calculateBlocksPercentage(program))}
                         </td>
                       </tr>
                     );
