@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, TrendingUp, Activity, Zap, GitCompare, Users, BarChart3 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Activity, Zap, GitCompare, Users, BarChart3, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import Link from 'next/link';
 import { getValidatorStats, getValidatorProgramUsage, triggerValidatorIngestion, ProgramUsage, ValidatorStats } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
@@ -34,6 +34,9 @@ export default function ComparePage() {
   const [validator2Stats, setValidator2Stats] = useState<ValidatorStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showOnlyKnown, setShowOnlyKnown] = useState(false);
+  const [sortField, setSortField] = useState<'program' | 'validator1' | 'validator2' | 'difference'>('difference');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     fetchData();
@@ -112,7 +115,31 @@ export default function ComparePage() {
     return Number(num).toFixed(2) + '%';
   };
 
-  // Create comparison data by merging programs from both validators
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortValue = (comparison: ComparisonData, field: typeof sortField) => {
+    switch (field) {
+      case 'program':
+        return getProgramName(comparison.program_id).toLowerCase();
+      case 'validator1':
+        return comparison.validator1_invocations;
+      case 'validator2':
+        return comparison.validator2_invocations;
+      case 'difference':
+        return Math.abs(comparison.difference_invocations);
+      default:
+        return 0;
+    }
+  };
+
+  // Create and filter comparison data
   const createComparisonData = (): ComparisonData[] => {
     const programMap = new Map<string, ComparisonData>();
     
@@ -165,12 +192,37 @@ export default function ComparePage() {
       difference_percentage: item.validator1_percentage - item.validator2_percentage,
     }));
     
-    return comparisonData.sort((a, b) => 
-      (b.validator1_invocations + b.validator2_invocations) - (a.validator1_invocations + a.validator2_invocations)
-    );
+    return comparisonData;
   };
 
-  const comparisonData = createComparisonData();
+  // Filter and sort comparison data
+  const getFilteredAndSortedData = (): ComparisonData[] => {
+    let filteredData = createComparisonData();
+    
+    // Apply known programs filter
+    if (showOnlyKnown) {
+      filteredData = filteredData.filter(item => isProgramKnown(item.program_id));
+    }
+    
+    // Apply sorting
+    const sortedData = [...filteredData].sort((a, b) => {
+      const aValue = getSortValue(a, sortField);
+      const bValue = getSortValue(b, sortField);
+      
+      let comparison = 0;
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
+      } else {
+        comparison = Number(aValue) - Number(bValue);
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    
+    return sortedData;
+  };
+
+  const comparisonData = getFilteredAndSortedData();
 
   const getDifferenceColor = (diff: number) => {
     if (diff > 0) return 'text-green-400';
@@ -182,6 +234,26 @@ export default function ComparePage() {
     if (diff > 0) return '+';
     if (diff < 0) return '';
     return '=';
+  };
+
+  // Sortable header component
+  const SortableHeader = ({ field, children, className = "" }: { field: typeof sortField; children: React.ReactNode; className?: string }) => {
+    const isActive = sortField === field;
+    return (
+      <th 
+        className={`px-6 py-3 text-xs font-medium uppercase tracking-wider cursor-pointer hover:bg-gray-700/30 transition-colors ${className}`}
+        onClick={() => handleSort(field)}
+      >
+        <div className="flex items-center justify-center space-x-1">
+          <span>{children}</span>
+          {isActive && (
+            sortDirection === 'asc' ? 
+              <ChevronUp className="h-3 w-3" /> : 
+              <ChevronDown className="h-3 w-3" />
+          )}
+        </div>
+      </th>
+    );
   };
 
   return (
@@ -288,10 +360,26 @@ export default function ComparePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold text-white">Program Usage Comparison</h2>
-            <p className="text-sm text-gray-400">
-              Side-by-side comparison of program invocations • {comparisonData.length} unique programs
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Program Usage Comparison</h2>
+                <p className="text-sm text-gray-400">
+                  Side-by-side comparison of program invocations • {comparisonData.length} unique programs
+                </p>
+              </div>
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyKnown}
+                    onChange={(e) => setShowOnlyKnown(e.target.checked)}
+                    className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                  />
+                  <span>Known programs only</span>
+                  <Filter className="h-4 w-4 text-gray-400" />
+                </label>
+              </div>
+            </div>
           </div>
           
           {loading ? (
@@ -311,18 +399,18 @@ export default function ComparePage() {
               <table className="w-full">
                 <thead className="bg-gray-900/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <SortableHeader field="program" className="text-left text-gray-400">
                       Program
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    </SortableHeader>
+                    <SortableHeader field="validator1" className="text-center text-blue-400">
                       Validator A
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-purple-400 uppercase tracking-wider">
+                    </SortableHeader>
+                    <SortableHeader field="validator2" className="text-center text-purple-400">
                       Validator B
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    </SortableHeader>
+                    <SortableHeader field="difference" className="text-center text-gray-400">
                       Difference
-                    </th>
+                    </SortableHeader>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">

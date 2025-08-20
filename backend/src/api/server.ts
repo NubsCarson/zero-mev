@@ -8,7 +8,8 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: config.server.corsOrigin,
+  origin: ['http://localhost:3000', 'http://localhost:3002'],
+  credentials: true,
 }));
 app.use(express.json());
 
