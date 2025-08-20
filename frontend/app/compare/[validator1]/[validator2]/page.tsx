@@ -160,10 +160,16 @@ export default function ComparePage() {
       } catch (pollError) {
         console.error('Error polling for comparison data:', pollError);
         if (attempts < maxAttempts) {
-          setTimeout(poll, 10000);
+          // Exponential backoff on errors
+          const delay = Math.min(10000 * Math.pow(1.5, Math.min(attempts - 1, 4)), 60000); // Max 60s
+          setTimeout(poll, delay);
         } else {
           setIsPolling(false);
-          setError('Failed to check for new data. Please try refreshing the page.');
+          setError('Failed to load data after multiple attempts. Auto-refreshing page...');
+          // Auto-refresh page after 5 seconds
+          setTimeout(() => {
+            window.location.reload();
+          }, 5000);
         }
       }
     };
@@ -455,6 +461,14 @@ export default function ComparePage() {
           ) : error ? (
             <div className="p-8 text-center text-red-400">
               {error}
+              <div className="mt-4">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                >
+                  Refresh Now
+                </button>
+              </div>
               {isPolling && (
                 <div className="mt-2 text-sm text-gray-500">
                   Auto-refreshing in progress...

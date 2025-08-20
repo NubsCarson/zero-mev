@@ -9,45 +9,88 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
   
   try {
     const currentSlot = await connection.getSlot();
-    let startSlot = currentSlot;
+    let slotsPerHour = 9000; // Approximately 400ms per slot = 9000 slots per hour
     
-    // Calculate slots based on time range (approximately 400ms per slot)
-    // Limit to recent blocks to avoid cleaned up data
+    // Calculate initial time range in slots
+    let timeRangeSlots: number;
     switch(timeRange) {
       case '1h':
-        startSlot = currentSlot - 9000;
+        timeRangeSlots = slotsPerHour;
         break;
       case '6h':
-        startSlot = currentSlot - 54000;
+        timeRangeSlots = slotsPerHour * 6;
         break;
       case '24h':
-        startSlot = currentSlot - 9000; // Use 1h of recent data only
+        timeRangeSlots = slotsPerHour * 24;
         break;
       case '7d':
-        startSlot = currentSlot - 9000; // Use 1h of recent data only
+        timeRangeSlots = slotsPerHour * 24 * 7;
         break;
       case '30d':
-        startSlot = currentSlot - 9000; // Use 1h of recent data only
+        timeRangeSlots = slotsPerHour * 24 * 30;
         break;
+      default:
+        timeRangeSlots = slotsPerHour * 24;
     }
-    
-    console.log(`🔍 Fetching blocks from slot ${startSlot} to ${currentSlot}`);
-    
-    // Get leader schedule to find validator's blocks
-    const epochInfo = await connection.getEpochInfo();
-    const leaderSchedule = await connection.getLeaderSchedule();
     
     let validatorSlots: number[] = [];
-    if (leaderSchedule && leaderSchedule[validatorIdentity]) {
-      validatorSlots = leaderSchedule[validatorIdentity]
-        .map(offset => epochInfo.absoluteSlot - epochInfo.slotIndex + offset)
-        .filter(slot => slot >= startSlot && slot <= currentSlot);
+    let searchWindowHours = 1; // Start with 1 hour
+    const maxSearchWindowHours = Math.max(24, timeRangeSlots / slotsPerHour); // Search up to requested time range or 24h minimum
+    
+    // Keep expanding search window until we find validator data
+    while (validatorSlots.length === 0 && searchWindowHours <= maxSearchWindowHours) {
+      const searchSlots = slotsPerHour * searchWindowHours;
+      const startSlot = currentSlot - searchSlots;
+      
+      console.log(`🔍 Searching for validator blocks from slot ${startSlot} to ${currentSlot} (${searchWindowHours}h window)`);
+      
+      // Get multiple epochs of leader schedules to increase chances of finding the validator
+      const epochInfo = await connection.getEpochInfo();
+      const epochs = [epochInfo.epoch - 1, epochInfo.epoch, epochInfo.epoch + 1]; // Previous, current, next epoch
+      
+      for (const epoch of epochs) {
+        try {
+          const leaderSchedule = await connection.getLeaderSchedule(null, { epoch });
+          if (leaderSchedule && leaderSchedule[validatorIdentity]) {
+            const epochSlots = leaderSchedule[validatorIdentity]
+              .map(offset => {
+                // Calculate absolute slot based on epoch
+                if (epoch === epochInfo.epoch) {
+                  return epochInfo.absoluteSlot - epochInfo.slotIndex + offset;
+                } else if (epoch === epochInfo.epoch - 1) {
+                  // Previous epoch - estimate based on slots per epoch (432000)
+                  return (epochInfo.absoluteSlot - epochInfo.slotIndex) - 432000 + offset;
+                } else {
+                  // Next epoch
+                  return (epochInfo.absoluteSlot - epochInfo.slotIndex) + 432000 + offset;
+                }
+              })
+              .filter(slot => slot >= startSlot && slot <= currentSlot);
+            
+            validatorSlots.push(...epochSlots);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not get leader schedule for epoch ${epoch}:`, error.message);
+        }
+      }
+      
+      // Remove duplicates and sort
+      validatorSlots = [...new Set(validatorSlots)].sort((a, b) => a - b);
+      
+      console.log(`📦 Found ${validatorSlots.length} slots for validator in ${searchWindowHours}h window`);
+      
+      if (validatorSlots.length === 0) {
+        searchWindowHours = Math.min(searchWindowHours * 2, maxSearchWindowHours); // Double the search window
+      }
     }
     
-    console.log(`📦 Found ${validatorSlots.length} slots for validator`);
+    if (validatorSlots.length === 0) {
+      console.log(`⚠️ No slots found for validator ${validatorIdentity} in ${maxSearchWindowHours}h window`);
+      return 0;
+    }
     
     let processedCount = 0;
-    const batchSize = 3; // Reduce batch size to avoid rate limiting
+    const batchSize = 2; // Further reduce batch size to avoid rate limiting
     
     for (let i = 0; i < validatorSlots.length; i += batchSize) {
       const batch = validatorSlots.slice(i, i + batchSize);
@@ -172,7 +215,7 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
       
       // Add delay between batches to avoid rate limiting
       if (i + batchSize < validatorSlots.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Increase delay to 2s
       }
     }
     

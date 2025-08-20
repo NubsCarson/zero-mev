@@ -56,10 +56,35 @@ export const searchValidators = async (query: string, limit = 20): Promise<Valid
   return response.data;
 };
 
+// Retry utility function
+const retryRequest = async <T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> => {
+  let lastError: Error;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      if (i === maxRetries) break;
+      
+      // Only retry on 500+ errors or network errors
+      if (error.response?.status >= 500 || error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('socket hang up')) {
+        const delay = Math.min(1000 * Math.pow(2, i), 10000); // Exponential backoff, max 10s
+        console.log(`API request failed (attempt ${i + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        break; // Don't retry client errors (4xx)
+      }
+    }
+  }
+  throw lastError!;
+};
+
 export const getValidatorStats = async (validatorId: string, timeRange = '24h'): Promise<ValidatorStats[]> => {
-  const response = await api.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
-    params: { timeRange },
-  });
+  const response = await retryRequest(() => 
+    api.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
+      params: { timeRange },
+    })
+  );
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
     return response.data.data;
@@ -68,9 +93,11 @@ export const getValidatorStats = async (validatorId: string, timeRange = '24h'):
 };
 
 export const getValidatorProgramUsage = async (validatorId: string, timeRange = '24h'): Promise<ProgramUsage[]> => {
-  const response = await api.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
-    params: { timeRange },
-  });
+  const response = await retryRequest(() => 
+    api.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
+      params: { timeRange },
+    })
+  );
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
     return response.data.data;
@@ -80,9 +107,11 @@ export const getValidatorProgramUsage = async (validatorId: string, timeRange = 
 
 // Quick polling versions with shorter timeouts
 export const getValidatorStatsQuick = async (validatorId: string, timeRange = '24h'): Promise<ValidatorStats[]> => {
-  const response = await apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
-    params: { timeRange },
-  });
+  const response = await retryRequest(() => 
+    apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/stats`, {
+      params: { timeRange },
+    }), 2 // Fewer retries for quick calls
+  );
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
     return response.data.data;
@@ -91,9 +120,11 @@ export const getValidatorStatsQuick = async (validatorId: string, timeRange = '2
 };
 
 export const getValidatorProgramUsageQuick = async (validatorId: string, timeRange = '24h'): Promise<ProgramUsage[]> => {
-  const response = await apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
-    params: { timeRange },
-  });
+  const response = await retryRequest(() => 
+    apiQuick.get(`/api/validators/${encodeURIComponent(validatorId)}/programs`, {
+      params: { timeRange },
+    }), 2 // Fewer retries for quick calls
+  );
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
     return response.data.data;

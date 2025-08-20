@@ -42,6 +42,7 @@ export class ProgramAnalyzer {
   private initializeKnownPrograms() {
     // System programs
     this.knownPrograms.set('11111111111111111111111111111111', 'System Program');
+    this.knownPrograms.set('Vote111111111111111111111111111111111111111', 'Vote Program');
     this.knownPrograms.set('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'Token Program');
     this.knownPrograms.set('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', 'Associated Token Program');
     this.knownPrograms.set('ComputeBudget111111111111111111111111111111', 'Compute Budget Program');
@@ -89,7 +90,8 @@ export class ProgramAnalyzer {
             if (instruction.programIdIndex < accountKeys.length) {
               const programId = accountKeys[instruction.programIdIndex];
               if (programId) {
-                this.incrementProgramUsage(programInvocations, programId);
+                const programIdString = typeof programId === 'string' ? programId : programId.toString();
+                this.incrementProgramUsage(programInvocations, programIdString);
                 totalInstructions++;
               }
             }
@@ -103,7 +105,8 @@ export class ProgramAnalyzer {
                   if (innerInstruction.programIdIndex < accountKeys.length) {
                     const programId = accountKeys[innerInstruction.programIdIndex];
                     if (programId) {
-                      this.incrementProgramUsage(programInvocations, programId);
+                      const programIdString = typeof programId === 'string' ? programId : programId.toString();
+                      this.incrementProgramUsage(programInvocations, programIdString);
                       totalInstructions++;
                     }
                   }
@@ -124,7 +127,8 @@ export class ProgramAnalyzer {
             if (instruction.programIdIndex < accountKeys.length) {
               const programId = accountKeys[instruction.programIdIndex];
               if (programId) {
-                this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
+                const programIdString = typeof programId === 'string' ? programId : programId.toString();
+                this.incrementProgramCu(programCuUsage, programIdString, cuPerProgram);
               }
             }
           }
@@ -136,7 +140,8 @@ export class ProgramAnalyzer {
                   if (innerInstruction.programIdIndex < accountKeys.length) {
                     const programId = accountKeys[innerInstruction.programIdIndex];
                     if (programId) {
-                      this.incrementProgramCu(programCuUsage, programId, cuPerProgram);
+                      const programIdString = typeof programId === 'string' ? programId : programId.toString();
+                      this.incrementProgramCu(programCuUsage, programIdString, cuPerProgram);
                     }
                   }
                 }
@@ -192,7 +197,8 @@ export class ProgramAnalyzer {
         if (instruction.programIdIndex < accountKeys.length) {
           const programId = accountKeys[instruction.programIdIndex];
           if (programId) {
-            uniquePrograms.add(programId);
+            const programIdString = typeof programId === 'string' ? programId : programId.toString();
+            uniquePrograms.add(programIdString);
           }
         }
       }
@@ -204,7 +210,8 @@ export class ProgramAnalyzer {
               if (innerInstruction.programIdIndex < accountKeys.length) {
                 const programId = accountKeys[innerInstruction.programIdIndex];
                 if (programId) {
-                  uniquePrograms.add(programId);
+                  const programIdString = typeof programId === 'string' ? programId : programId.toString();
+                  uniquePrograms.add(programIdString);
                 }
               }
             }
