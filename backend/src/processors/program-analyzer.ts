@@ -119,7 +119,7 @@ export class ProgramAnalyzer {
     // Calculate percentages and create usage array
     const programUsage: ProgramUsage[] = [];
     for (const [programId, invocationCount] of programInvocations.entries()) {
-      const percentage = totalInstructions > 0 ? (invocationCount / totalInstructions) * 100 : 0;
+      const percentage = totalInstructions > 0 ? Math.round((invocationCount / totalInstructions) * 100 * 100) / 100 : 0;
       const cuConsumed = programCuUsage.get(programId) || 0;
 
       programUsage.push({
@@ -172,9 +172,9 @@ export class ProgramAnalyzer {
     return this.knownPrograms.get(programId) || `Unknown Program (${programId.slice(0, 8)}...)`;
   }
 
-  // Mock transaction generation for testing
+  // PRODUCTION: Mock transaction generation disabled
   generateMockTransactions(count: number = 10): Transaction[] {
-    const transactions: Transaction[] = [];
+    // PRODUCTION: Disabled - return empty array\n    return [];\n    \n    /*\n    const transactions: Transaction[] = [];
     const programIds = Array.from(this.knownPrograms.keys());
 
     for (let i = 0; i < count; i++) {
@@ -205,7 +205,7 @@ export class ProgramAnalyzer {
       });
     }
 
-    return transactions;
+    return transactions;\n    */
   }
 }
 

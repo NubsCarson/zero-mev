@@ -19,37 +19,16 @@ async function main() {
       try {
         console.log(`📦 Processing block ${blockData.slot} from validator ${blockData.validatorIdentity}`);
 
-        // For demo purposes, generate mock transactions
-        const mockTransactions = programAnalyzer.generateMockTransactions(Math.floor(Math.random() * 20) + 5);
+        // PRODUCTION: Skip mock data generation - only use on-demand ingestion
+        return;
         
-        // Analyze program usage
-        const analysis = programAnalyzer.analyzeBlock(mockTransactions);
+        // const mockTransactions = programAnalyzer.generateMockTransactions(Math.floor(Math.random() * 20) + 5);
+        // const analysis = programAnalyzer.analyzeBlock(mockTransactions);
 
-        // Store block data
-        await clickHouseManager.insertBlock({
-          slot: blockData.slot,
-          hash: blockData.hash,
-          parentHash: blockData.parentHash,
-          validatorIdentity: blockData.validatorIdentity,
-          timestamp: blockData.timestamp,
-          transactionCount: mockTransactions.length,
-          totalCuConsumed: analysis.totalCuConsumed,
-        });
-
-        // Store program usage data
-        const programUsageData = analysis.programUsage.map(usage => ({
-          slot: blockData.slot,
-          validatorIdentity: blockData.validatorIdentity,
-          programId: usage.programId,
-          invocationCount: usage.invocationCount,
-          percentage: usage.percentage,
-          cuConsumed: usage.cuConsumed,
-          timestamp: blockData.timestamp,
-        }));
-
-        await clickHouseManager.insertProgramUsage(programUsageData);
-
-        console.log(`✅ Processed block ${blockData.slot} with ${analysis.programUsage.length} unique programs`);
+        // COMMENTED OUT - using on-demand ingestion only
+        // await clickHouseManager.insertBlock(...);
+        // await clickHouseManager.insertProgramUsage(...);
+        // console.log(`✅ Processed block ${blockData.slot} with ${analysis.programUsage.length} unique programs`);
       } catch (error) {
         console.error(`❌ Error processing block ${blockData.slot}:`, error);
       }

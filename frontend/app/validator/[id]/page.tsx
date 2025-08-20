@@ -25,6 +25,7 @@ export default function ValidatorPage() {
   const [compareValidator, setCompareValidator] = useState('');
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -49,7 +50,11 @@ export default function ValidatorPage() {
         
         try {
           await triggerValidatorIngestion(validatorId, timeRange);
-          setError('Data is being fetched from the blockchain. This may take a few minutes. Please refresh the page in a moment.');
+          setError('Data is being fetched from the blockchain. This should complete in a minute or two.');
+          
+          // Start polling for data
+          setIsPolling(true);
+          pollForData();
         } catch (ingestError) {
           console.error('Failed to trigger ingestion:', ingestError);
           setError('Failed to fetch validator data. Please check the address and try again.');
@@ -69,6 +74,57 @@ export default function ValidatorPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const pollForData = async () => {
+    let attempts = 0;
+    const maxAttempts = 30; // Poll for up to 5 minutes (10 second intervals)
+    
+    const poll = async () => {
+      attempts++;
+      
+      try {
+        const [statsData, programData] = await Promise.all([
+          getValidatorStats(validatorId, timeRange),
+          getValidatorProgramUsage(validatorId, timeRange)
+        ]);
+        
+        const hasData = statsData.length > 0 || programData.length > 0;
+        
+        if (hasData) {
+          // Data found! Update the UI
+          console.log('✅ Ingestion completed, refreshing data...');
+          setIsPolling(false);
+          setError(null);
+          
+          const sortedPrograms = programData.sort((a, b) => 
+            Number(b.total_invocations) - Number(a.total_invocations)
+          );
+          
+          setPrograms(sortedPrograms);
+          setStats(statsData[0] || null);
+          setLoading(false);
+        } else if (attempts < maxAttempts) {
+          // No data yet, continue polling
+          setTimeout(poll, 10000); // Poll every 10 seconds
+        } else {
+          // Max attempts reached
+          setIsPolling(false);
+          setError('Ingestion is taking longer than expected. Please try refreshing the page.');
+        }
+      } catch (pollError) {
+        console.error('Error polling for data:', pollError);
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000);
+        } else {
+          setIsPolling(false);
+          setError('Failed to check for new data. Please try refreshing the page.');
+        }
+      }
+    };
+    
+    // Start polling after 30 seconds to give ingestion time to start
+    setTimeout(poll, 30000);
   };
 
   const formatNumber = (num: string | number) => {
@@ -362,11 +418,21 @@ export default function ValidatorPage() {
           
           {loading ? (
             <div className="p-8 text-center text-gray-400">
-              Loading program data...
+              {isPolling ? 'Waiting for blockchain data ingestion to complete...' : 'Loading program data...'}
+              {isPolling && (
+                <div className="mt-2 text-sm text-gray-500">
+                  This usually takes 1-2 minutes. The page will auto-refresh when ready.
+                </div>
+              )}
             </div>
           ) : error ? (
             <div className="p-8 text-center text-red-400">
               {error}
+              {isPolling && (
+                <div className="mt-2 text-sm text-gray-500">
+                  Auto-refreshing in progress...
+                </div>
+              )}
             </div>
           ) : filteredAndSortedPrograms.length === 0 ? (
             <div className="p-8 text-center text-gray-400">

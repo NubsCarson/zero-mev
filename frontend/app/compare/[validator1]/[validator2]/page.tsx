@@ -37,6 +37,7 @@ export default function ComparePage() {
   const [showOnlyKnown, setShowOnlyKnown] = useState(false);
   const [sortField, setSortField] = useState<'program' | 'validator1' | 'validator2' | 'difference'>('difference');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [isPolling, setIsPolling] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -85,12 +86,16 @@ export default function ComparePage() {
         setValidator2Programs(validator2ProgramData);
         setValidator2Stats(validator2StatsData[0] || null);
         
+        // Start polling for both validators
+        setIsPolling(true);
+        pollForData(!validator1HasData, !validator2HasData);
+        
         if (!validator1HasData && !validator2HasData) {
-          setError('Data is being fetched for both validators. This may take a few minutes. Please refresh the page in a moment.');
+          setError('Data is being fetched for both validators. This should complete in a minute or two.');
         } else if (!validator1HasData) {
-          setError('Data is being fetched for the first validator. This may take a few minutes. Please refresh the page in a moment.');
+          setError('Data is being fetched for the first validator. This should complete in a minute or two.');
         } else {
-          setError('Data is being fetched for the second validator. This may take a few minutes. Please refresh the page in a moment.');
+          setError('Data is being fetched for the second validator. This should complete in a minute or two.');
         }
       } else {
         // We have data for both validators
@@ -105,6 +110,65 @@ export default function ComparePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const pollForData = async (needsValidator1Data: boolean, needsValidator2Data: boolean) => {
+    let attempts = 0;
+    const maxAttempts = 30; // Poll for up to 5 minutes (10 second intervals)
+    
+    const poll = async () => {
+      attempts++;
+      
+      try {
+        const [
+          validator1ProgramData,
+          validator1StatsData,
+          validator2ProgramData,
+          validator2StatsData
+        ] = await Promise.all([
+          getValidatorProgramUsage(validator1Id, timeRange),
+          getValidatorStats(validator1Id, timeRange),
+          getValidatorProgramUsage(validator2Id, timeRange),
+          getValidatorStats(validator2Id, timeRange)
+        ]);
+        
+        const validator1HasData = validator1ProgramData.length > 0 || validator1StatsData.length > 0;
+        const validator2HasData = validator2ProgramData.length > 0 || validator2StatsData.length > 0;
+        
+        const hasRequiredData = (!needsValidator1Data || validator1HasData) && (!needsValidator2Data || validator2HasData);
+        
+        if (hasRequiredData) {
+          // Data found! Update the UI
+          console.log('✅ Ingestion completed, refreshing comparison data...');
+          setIsPolling(false);
+          setError(null);
+          
+          setValidator1Programs(validator1ProgramData);
+          setValidator1Stats(validator1StatsData[0] || null);
+          setValidator2Programs(validator2ProgramData);
+          setValidator2Stats(validator2StatsData[0] || null);
+          setLoading(false);
+        } else if (attempts < maxAttempts) {
+          // No data yet, continue polling
+          setTimeout(poll, 10000); // Poll every 10 seconds
+        } else {
+          // Max attempts reached
+          setIsPolling(false);
+          setError('Ingestion is taking longer than expected. Please try refreshing the page.');
+        }
+      } catch (pollError) {
+        console.error('Error polling for comparison data:', pollError);
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000);
+        } else {
+          setIsPolling(false);
+          setError('Failed to check for new data. Please try refreshing the page.');
+        }
+      }
+    };
+    
+    // Start polling after 30 seconds to give ingestion time to start
+    setTimeout(poll, 30000);
   };
 
   const formatNumber = (num: string | number) => {
@@ -384,11 +448,21 @@ export default function ComparePage() {
           
           {loading ? (
             <div className="p-8 text-center text-gray-400">
-              Loading comparison data...
+              {isPolling ? 'Waiting for blockchain data ingestion to complete...' : 'Loading comparison data...'}
+              {isPolling && (
+                <div className="mt-2 text-sm text-gray-500">
+                  This usually takes 1-2 minutes. The page will auto-refresh when ready.
+                </div>
+              )}
             </div>
           ) : error ? (
             <div className="p-8 text-center text-red-400">
               {error}
+              {isPolling && (
+                <div className="mt-2 text-sm text-gray-500">
+                  Auto-refreshing in progress...
+                </div>
+              )}
             </div>
           ) : comparisonData.length === 0 ? (
             <div className="p-8 text-center text-gray-400">
