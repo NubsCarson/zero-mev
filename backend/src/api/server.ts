@@ -6,10 +6,10 @@ import { handleIngestValidator } from './routes/ingest.js';
 
 const app = express();
 
-// Middleware
+// Middleware - Allow all origins for easy deployment
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3002'],
-  credentials: true,
+  origin: '*',
+  credentials: false,
 }));
 app.use(express.json());
 
