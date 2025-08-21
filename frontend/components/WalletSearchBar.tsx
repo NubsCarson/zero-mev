@@ -90,7 +90,7 @@ export default function WalletSearchBar({ timeRange }: WalletSearchBarProps) {
           }}
           onFocus={() => setShowDropdown(true)}
           onKeyPress={handleKeyPress}
-          placeholder="Enter wallet address (e.g., 3Bpjjj...)"
+          placeholder="Enter wallet address..."
           className="w-full px-4 py-3 pl-12 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-gray-600 focus:border-gray-600 text-gray-100 placeholder-gray-400"
         />
         <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
