@@ -51,16 +51,7 @@ CREATE TABLE IF NOT EXISTS programs (
 ) ENGINE = ReplacingMergeTree()
 ORDER BY program_id;
 
--- Insert common Solana system programs
-INSERT INTO programs (program_id, name, category, description, is_system_program) VALUES
-('11111111111111111111111111111111', 'System Program', 'system', 'Core system program for account management', 1),
-('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'Token Program', 'token', 'SPL Token program for fungible tokens', 1),
-('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', 'Associated Token Program', 'token', 'Associated token account program', 1),
-('9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM', 'Serum DEX v3', 'dex', 'Serum decentralized exchange', 0),
-('whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', 'Whirlpool', 'dex', 'Orca Whirlpools concentrated liquidity AMM', 0),
-('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', 'Raydium AMM', 'dex', 'Raydium automated market maker', 0),
-('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4', 'Jupiter', 'dex', 'Jupiter aggregator program', 0),
-('ComputeBudget111111111111111111111111111111', 'Compute Budget Program', 'system', 'Program for setting compute unit limits', 1);
+-- Insert common Solana system programs (optional, can be populated later)
 
 -- Materialized view for aggregated validator stats
 CREATE MATERIALIZED VIEW IF NOT EXISTS validator_stats_hourly

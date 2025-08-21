@@ -164,3 +164,126 @@ export const triggerValidatorIngestion = async (validatorId: string, timeRange =
   return response.data;
 };
 
+// Wallet-related API functions
+export interface WalletStats {
+  wallet_address: string;
+  total_transactions: number;
+  total_cu_consumed: number;
+  unique_programs_used: number;
+  total_fees_paid: number;
+  first_transaction: string;
+  last_transaction: string;
+}
+
+export interface WalletProgramUsage {
+  program_id: string;
+  total_invocations: number;
+  total_cu_consumed: number;
+  transaction_count: number;
+}
+
+export interface WalletTransaction {
+  signature: string;
+  slot: number;
+  block_time: string;
+  fee: number;
+  status: string;
+  compute_units_consumed: number;
+  programs_invoked: string[];
+  transaction_type: string;
+  amount: number | null;
+}
+
+export interface WalletSearchResult {
+  wallet_address: string;
+  transaction_count: number;
+}
+
+export const searchWallets = async (query: string, limit = 20): Promise<WalletSearchResult[]> => {
+  const response = await api.get('/api/wallets/search', {
+    params: { q: query, limit },
+  });
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getWalletStats = async (walletAddress: string, timeRange = '24h'): Promise<WalletStats[]> => {
+  const response = await retryRequest(() => 
+    api.get(`/api/wallets/${encodeURIComponent(walletAddress)}/stats`, {
+      params: { timeRange },
+    })
+  );
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getWalletProgramUsage = async (walletAddress: string, timeRange = '24h'): Promise<WalletProgramUsage[]> => {
+  const response = await retryRequest(() => 
+    api.get(`/api/wallets/${encodeURIComponent(walletAddress)}/programs`, {
+      params: { timeRange },
+    })
+  );
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getWalletTransactions = async (walletAddress: string, timeRange = '24h', limit = 100): Promise<WalletTransaction[]> => {
+  const response = await retryRequest(() => 
+    api.get(`/api/wallets/${encodeURIComponent(walletAddress)}/transactions`, {
+      params: { timeRange, limit },
+    })
+  );
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getTopWallets = async (timeRange = '24h', limit = 50): Promise<WalletSearchResult[]> => {
+  const response = await api.get('/api/wallets/top', {
+    params: { timeRange, limit },
+  });
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const triggerWalletIngestion = async (walletAddress: string, timeRange = '24h'): Promise<{ message: string; status: string }> => {
+  const response = await api.get('/api/ingest-wallet', {
+    params: { wallet: walletAddress, timeRange },
+  });
+  return response.data;
+};
+
+// Quick polling versions for wallets
+export const getWalletStatsQuick = async (walletAddress: string, timeRange = '24h'): Promise<WalletStats[]> => {
+  const response = await retryRequest(() => 
+    apiQuick.get(`/api/wallets/${encodeURIComponent(walletAddress)}/stats`, {
+      params: { timeRange },
+    }), 2
+  );
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const getWalletProgramUsageQuick = async (walletAddress: string, timeRange = '24h'): Promise<WalletProgramUsage[]> => {
+  const response = await retryRequest(() => 
+    apiQuick.get(`/api/wallets/${encodeURIComponent(walletAddress)}/programs`, {
+      params: { timeRange },
+    }), 2
+  );
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+

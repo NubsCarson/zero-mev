@@ -18,8 +18,16 @@ export default function Home() {
               Search for a Validator
             </h1>
             <p className="text-gray-400 text-base">
-               
+              Analyze validator block production and program usage
             </p>
+            <div className="mt-4">
+              <a 
+                href="/wallet"
+                className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-md text-sm text-gray-300 transition-colors"
+              >
+                Switch to Wallet Tracker →
+              </a>
+            </div>
           </div>
           
           {/* Search and Time Range */}

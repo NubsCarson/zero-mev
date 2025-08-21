@@ -3,6 +3,14 @@ import cors from 'cors';
 import { config } from '../config/index.js';
 import { clickHouseManager } from '../database/client.js';
 import { handleIngestValidator } from './routes/ingest.js';
+import { 
+  handleIngestWallet, 
+  searchWallets, 
+  getWalletStats, 
+  getWalletProgramUsage, 
+  getWalletTransactions,
+  getTopWallets 
+} from './routes/wallet.js';
 
 const app = express();
 
@@ -85,6 +93,14 @@ app.get('/api/validators/top', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Wallet endpoints
+app.get('/api/ingest-wallet', handleIngestWallet);
+app.get('/api/wallets/search', searchWallets);
+app.get('/api/wallets/:walletId/stats', getWalletStats);
+app.get('/api/wallets/:walletId/programs', getWalletProgramUsage);
+app.get('/api/wallets/:walletId/transactions', getWalletTransactions);
+app.get('/api/wallets/top', getTopWallets);
 
 
 // Get time-series data for validator
