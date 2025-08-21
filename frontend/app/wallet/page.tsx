@@ -32,19 +32,12 @@ export default function WalletHome() {
             </div>
             
             {/* Navigation Link */}
-            <div className="flex justify-center space-x-4 text-sm">
+            <div className="flex justify-center text-sm">
               <Link 
                 href="/"
                 className="text-gray-400 hover:text-gray-300 transition-colors"
               >
                 ← Back to Validator Search
-              </Link>
-              <span className="text-gray-600">|</span>
-              <Link 
-                href="/wallet/3BpjjjJujk6qsG6rRLdiR3Wfsgh3SdhyJ83W46VUyc3Q"
-                className="text-gray-400 hover:text-gray-300 transition-colors"
-              >
-                View Example Wallet →
               </Link>
             </div>
           </div>
