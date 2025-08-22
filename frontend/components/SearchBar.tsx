@@ -8,9 +8,10 @@ import { searchValidators, triggerValidatorIngestion } from '@/lib/api';
 interface SearchBarProps {
   timeRange?: string;
   placeholder?: string;
+  onValidatorSelect?: (validatorId: string) => void;
 }
 
-export default function SearchBar({ timeRange = '24h', placeholder = "Enter validator address..." }: SearchBarProps) {
+export default function SearchBar({ timeRange = '24h', placeholder = "Enter validator address...", onValidatorSelect }: SearchBarProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,16 +37,24 @@ export default function SearchBar({ timeRange = '24h', placeholder = "Enter vali
         try {
           await triggerValidatorIngestion(validatorId, timeRange);
           
-          // Redirect to validator page - data will load there
-          router.push(`/validator/${encodeURIComponent(validatorId)}?timeRange=${timeRange}`);
+          // Use callback or redirect to validator page based on context
+          if (onValidatorSelect) {
+            onValidatorSelect(validatorId);
+          } else {
+            router.push(`/validator/${encodeURIComponent(validatorId)}?timeRange=${timeRange}`);
+          }
         } catch (ingestError) {
           console.error('Failed to trigger ingestion:', ingestError);
           setError('Failed to fetch validator data. Please check the address and try again.');
         }
       } else {
-        // Redirect to validator page with the first result
+        // Use callback or redirect based on context
         const foundValidatorId = validators[0].validator_identity;
-        router.push(`/validator/${encodeURIComponent(foundValidatorId)}?timeRange=${timeRange}`);
+        if (onValidatorSelect) {
+          onValidatorSelect(foundValidatorId);
+        } else {
+          router.push(`/validator/${encodeURIComponent(foundValidatorId)}?timeRange=${timeRange}`);
+        }
       }
     } catch (error) {
       console.error('Search error:', error);

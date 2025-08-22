@@ -11,6 +11,8 @@ import {
   getWalletTransactions,
   getTopWallets 
 } from './routes/wallet.js';
+import blacklistRoutes from './routes/blacklist.js';
+import walletBlacklistRoutes from './routes/walletBlacklist.js';
 
 const app = express();
 
@@ -101,6 +103,12 @@ app.get('/api/wallets/:walletId/stats', getWalletStats);
 app.get('/api/wallets/:walletId/programs', getWalletProgramUsage);
 app.get('/api/wallets/:walletId/transactions', getWalletTransactions);
 app.get('/api/wallets/top', getTopWallets);
+
+// Blacklist endpoints
+app.use('/api/blacklist', blacklistRoutes);
+
+// Wallet blacklist endpoints
+app.use('/api/wallet-blacklist', walletBlacklistRoutes);
 
 
 // Get time-series data for validator

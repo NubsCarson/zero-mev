@@ -1,12 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import SearchBar from '@/components/SearchBar';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
-import { BlacklistManager } from '@/components/BlacklistManager';
+import { WalletBlacklistManager } from '@/components/WalletBlacklistManager';
 
-export default function Home() {
+export default function WalletDiscoveryPage() {
   const [timeRange, setTimeRange] = useState('24h');
+  const router = useRouter();
+
+  const handleValidatorSelect = (validatorId: string) => {
+    router.push(`/wallet-discovery/${validatorId}?timeRange=${timeRange}`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
@@ -15,23 +21,28 @@ export default function Home() {
           {/* Header */}
           <div className="text-center">
             <h1 className="text-3xl font-semibold text-gray-100 mb-3">
-              Search for a Validator
+              Wallet Discovery
             </h1>
             <p className="text-gray-400 text-base">
+              Enter a validator address to discover wallets that interacted with blocks from that validator
             </p>
             <div className="mt-4">
               <a 
-                href="/wallet-discovery"
+                href="/"
                 className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-md text-sm text-gray-300 transition-colors"
               >
-                Switch to Wallet Discovery →
+                ← Switch to Validator Search
               </a>
             </div>
           </div>
           
           {/* Search and Time Range */}
           <div className="flex flex-col space-y-4">
-            <SearchBar timeRange={timeRange} />
+            <SearchBar 
+              timeRange={timeRange} 
+              onValidatorSelect={handleValidatorSelect}
+              placeholder="Enter validator address to discover wallets..."
+            />
             <div className="flex justify-center">
               <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
             </div>
@@ -39,7 +50,7 @@ export default function Home() {
           
           {/* Blacklist Manager */}
           <div className="flex justify-center">
-            <BlacklistManager />
+            <WalletBlacklistManager />
           </div>
         </div>
       </div>

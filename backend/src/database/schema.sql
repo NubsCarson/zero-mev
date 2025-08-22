@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS programs (
 ) ENGINE = ReplacingMergeTree()
 ORDER BY program_id;
 
+-- Table for global program blacklist (server-side)
+CREATE TABLE IF NOT EXISTS program_blacklist (
+    program_id String,
+    blacklisted_at DateTime64(3) DEFAULT now(),
+    reason String DEFAULT '',
+    INDEX idx_program_id program_id TYPE bloom_filter(0.01) GRANULARITY 1
+) ENGINE = ReplacingMergeTree()
+ORDER BY program_id;
+
+-- Table for global wallet blacklist (server-side)
+CREATE TABLE IF NOT EXISTS wallet_blacklist (
+    wallet_address String,
+    blacklisted_at DateTime64(3) DEFAULT now(),
+    reason String DEFAULT ''
+) ENGINE = ReplacingMergeTree()
+ORDER BY wallet_address;
+
 -- Insert common Solana system programs (optional, can be populated later)
 
 -- Materialized view for aggregated validator stats

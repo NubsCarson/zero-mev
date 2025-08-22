@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Search, Loader2, Wallet } from 'lucide-react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { searchWallets, getTopWallets } from '@/lib/api';
-import debounce from 'lodash/debounce';
+import { Search, X } from 'lucide-react';
 
 interface WalletSearchBarProps {
   timeRange: string;
@@ -13,150 +11,83 @@ interface WalletSearchBarProps {
 export default function WalletSearchBar({ timeRange }: WalletSearchBarProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Array<{ wallet_address: string; transaction_count: number }>>([]);
-  const [loading, setLoading] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [topWallets, setTopWallets] = useState<Array<{ wallet_address: string; transaction_count: number }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Load top wallets when component mounts
-    loadTopWallets();
-  }, [timeRange]);
+  const handleSearch = async () => {
+    if (query.trim().length === 0) {
+      setError('Please enter a validator address');
+      return;
+    }
 
-  const loadTopWallets = async () => {
+    setIsLoading(true);
+    setError(null);
+    
     try {
-      const wallets = await getTopWallets(timeRange, 10);
-      setTopWallets(wallets);
+      const validatorId = query.trim();
+      
+      // Navigate to wallet discovery page with validator query
+      router.push(`/wallet-discovery/${encodeURIComponent(validatorId)}?timeRange=${timeRange}`);
     } catch (error) {
-      console.error('Error loading top wallets:', error);
+      console.error('Search error:', error);
+      setError('Failed to search for wallets. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const searchWalletsDebounced = useCallback(
-    debounce(async (searchQuery: string) => {
-      if (searchQuery.length < 3) {
-        setResults(topWallets);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const searchResults = await searchWallets(searchQuery);
-        setResults(searchResults);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 300),
-    [topWallets]
-  );
-
-  useEffect(() => {
-    if (query) {
-      searchWalletsDebounced(query);
-    } else {
-      setResults(topWallets);
-    }
-  }, [query, searchWalletsDebounced, topWallets]);
-
-  const handleSelect = (walletAddress: string) => {
-    router.push(`/wallet/${walletAddress}?timeRange=${timeRange}`);
-    setShowDropdown(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && query) {
-      // If there's an exact match or only one result, navigate to it
-      if (results.length === 1) {
-        handleSelect(results[0].wallet_address);
-      } else if (query.length === 44) {
-        // Likely a full wallet address
-        handleSelect(query);
-      }
+    if (e.key === 'Enter') {
+      handleSearch();
     }
   };
 
-  return (
-    <div className="relative w-full max-w-2xl mx-auto">
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setShowDropdown(true);
-          }}
-          onFocus={() => setShowDropdown(true)}
-          onKeyPress={handleKeyPress}
-          placeholder="Enter wallet address..."
-          className="w-full px-4 py-3 pl-12 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-gray-600 focus:border-gray-600 text-gray-100 placeholder-gray-400"
-        />
-        <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-          {loading ? (
-            <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
-          ) : (
-            <Search className="h-5 w-5 text-gray-400" />
-          )}
-        </div>
-      </div>
+  const clearSearch = () => {
+    setQuery('');
+    setError(null);
+  };
 
-      {showDropdown && (results.length > 0 || (!loading && query.length > 0)) && (
-        <div className="absolute w-full mt-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-10 max-h-96 overflow-y-auto">
-          {results.length > 0 ? (
-            <>
-              {!query && (
-                <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-800">
-                  Top Active Wallets ({timeRange})
-                </div>
-              )}
-              {results.map((result) => (
-                <button
-                  key={result.wallet_address}
-                  onClick={() => handleSelect(result.wallet_address)}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-800 transition-colors border-b border-gray-800 last:border-b-0"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Wallet className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <div className="text-sm font-mono text-gray-200">
-                          {result.wallet_address.slice(0, 4)}...{result.wallet_address.slice(-4)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {result.wallet_address}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-400">
-                        {result.transaction_count.toLocaleString()} txns
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </>
-          ) : (
-            <div className="px-4 py-3 text-sm text-gray-400">
-              {query.length === 44 ? (
-                <button
-                  onClick={() => handleSelect(query)}
-                  className="w-full text-left hover:text-gray-200 transition-colors"
-                >
-                  <div className="flex items-center space-x-2">
-                    <Search className="h-4 w-4" />
-                    <span>Search for wallet: {query.slice(0, 8)}...</span>
-                  </div>
-                </button>
-              ) : (
-                'No wallets found'
-              )}
-            </div>
-          )}
+  return (
+    <div className="w-full max-w-6xl">
+      <div className="flex flex-col space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setError(null);
+              }}
+              onKeyPress={handleKeyPress}
+              placeholder="Enter validator address to find wallets..."
+              className="w-full pl-10 pr-10 py-3 border border-gray-700 rounded-md focus:ring-2 focus:ring-gray-600 focus:border-gray-600 text-gray-100 bg-gray-900 placeholder-gray-400"
+            />
+            {query && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={handleSearch}
+            disabled={isLoading}
+            className="px-6 py-3 bg-gray-800 text-gray-100 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isLoading ? 'Searching...' : 'Search'}
+          </button>
         </div>
-      )}
+        
+        {error && (
+          <div className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-md p-3">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

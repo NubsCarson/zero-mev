@@ -196,12 +196,17 @@ export interface WalletTransaction {
 
 export interface WalletSearchResult {
   wallet_address: string;
-  transaction_count: number;
+  total_transactions: number;
+  total_cu_consumed: number;
+  total_fees_paid: number;
+  blocks_interacted: number;
+  first_interaction: string;
+  last_interaction: string;
 }
 
-export const searchWallets = async (query: string, limit = 20): Promise<WalletSearchResult[]> => {
+export const searchWallets = async (validatorQuery: string, timeRange = '24h', limit = 20): Promise<WalletSearchResult[]> => {
   const response = await api.get('/api/wallets/search', {
-    params: { q: query, limit },
+    params: { q: validatorQuery, timeRange, limit },
   });
   if (response.data && response.data.data) {
     return response.data.data;
@@ -284,6 +289,44 @@ export const getWalletProgramUsageQuick = async (walletAddress: string, timeRang
   if (response.data && response.data.data) {
     return response.data.data;
   }
+  return response.data;
+};
+
+// Blacklist API functions
+export interface BlacklistedProgram {
+  program_id: string;
+  blacklisted_at: string;
+  reason: string;
+}
+
+export const getBlacklistedPrograms = async (): Promise<BlacklistedProgram[]> => {
+  const response = await api.get('/api/blacklist');
+  if (response.data && response.data.data) {
+    return response.data.data;
+  }
+  return response.data;
+};
+
+export const addToBlacklist = async (programId: string, reason: string = ''): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/api/blacklist', {
+    program_id: programId,
+    reason: reason,
+  });
+  return response.data;
+};
+
+export const removeFromBlacklist = async (programId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.delete(`/api/blacklist/${encodeURIComponent(programId)}`);
+  return response.data;
+};
+
+export const isBlacklisted = async (programId: string): Promise<boolean> => {
+  const response = await api.get(`/api/blacklist/check/${encodeURIComponent(programId)}`);
+  return response.data.is_blacklisted;
+};
+
+export const clearBlacklist = async (): Promise<{ success: boolean; message: string }> => {
+  const response = await api.delete('/api/blacklist');
   return response.data;
 };
 

@@ -96,8 +96,23 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
           });
           
           if (block) {
-            // Analyze program invocations
+            // Calculate block time first
+            const blockTime = block.blockTime ? new Date(block.blockTime * 1000) : new Date();
+            
+            // Analyze program invocations and collect wallet transactions
             const programStats = new Map<string, { count: number, cu: number }>();
+            const walletTransactions: Array<{
+              signature: string;
+              slot: number;
+              blockTime: Date;
+              fee: number;
+              status: string;
+              computeUnitsConsumed: number;
+              programsInvoked: string[];
+              transactionType: string;
+              amount: number | null;
+              walletAddress: string;
+            }> = [];
             let totalCU = 0;
             
             for (const tx of block.transactions) {
@@ -156,11 +171,74 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                     cu: existing.cu + cuPerProgram
                   });
                 }
+                
+                // Collect wallet transaction data
+                try {
+                  const signature = tx.transaction.signatures?.[0] || '';
+                  const fee = tx.meta.fee || 0;
+                  const status = tx.meta.err ? 'failed' : 'success';
+                  
+                  // Get wallet addresses from transaction accounts
+                  const message = tx.transaction.message;
+                  let accountKeys: string[] = [];
+                  
+                  if ('staticAccountKeys' in message) {
+                    // Versioned transaction
+                    accountKeys = message.staticAccountKeys.map(key => key.toBase58());
+                  } else if ('accountKeys' in message) {
+                    // Legacy transaction
+                    accountKeys = message.accountKeys.map(key => key.toBase58());
+                  }
+                  
+                  // The first account is usually the fee payer (primary wallet)
+                  if (accountKeys.length > 0) {
+                    const walletAddress = accountKeys[0];
+                    
+                    // Determine transaction type and amount
+                    let transactionType = 'unknown';
+                    let amount: number | null = null;
+                    
+                    // Check for common transaction types based on program IDs
+                    if (programIds.has('11111111111111111111111111111111')) {
+                      transactionType = 'system';
+                    } else if (programIds.has('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')) {
+                      transactionType = 'token';
+                    } else if (programIds.has('Vote111111111111111111111111111111111111111')) {
+                      transactionType = 'vote';
+                    } else if (programIds.has('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4')) {
+                      transactionType = 'swap';
+                    } else if (programIds.size > 0) {
+                      transactionType = 'program';
+                    }
+                    
+                    // Try to extract amount from pre/post balances
+                    if (tx.meta.preBalances && tx.meta.postBalances && tx.meta.preBalances.length > 0 && tx.meta.postBalances.length > 0) {
+                      const preBalance = tx.meta.preBalances[0];
+                      const postBalance = tx.meta.postBalances[0];
+                      amount = Math.abs(postBalance - preBalance);
+                    }
+                    
+                    walletTransactions.push({
+                      signature,
+                      slot,
+                      blockTime: blockTime,
+                      fee,
+                      status,
+                      computeUnitsConsumed: computeUnits,
+                      programsInvoked: Array.from(programIds),
+                      transactionType,
+                      amount,
+                      walletAddress
+                    });
+                  }
+                } catch (walletError) {
+                  // Don't fail the whole block processing if wallet extraction fails
+                  console.log(`⚠️ Failed to extract wallet data from transaction: ${walletError.message}`);
+                }
               }
             }
             
             // Only store blocks that contain vote transactions (every validator block should have these)
-            const blockTime = block.blockTime ? new Date(block.blockTime * 1000) : new Date();
             const programUsageData = Array.from(programStats.entries()).map(([programId, stats]) => ({
               slot,
               validatorIdentity,
@@ -193,6 +271,11 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
               
               // Insert program usage data
               await clickHouseManager.insertProgramUsage(programUsageData);
+              
+              // Insert wallet transactions if we have any
+              if (walletTransactions.length > 0) {
+                await clickHouseManager.insertWalletTransactions(walletTransactions);
+              }
             }
             
             processedCount++;

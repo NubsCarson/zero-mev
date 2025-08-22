@@ -36,16 +36,16 @@ export async function handleIngestWallet(req: Request, res: Response) {
 
 export async function searchWallets(req: Request, res: Response) {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, timeRange = '24h', limit = 20 } = req.query;
     
     if (!q || typeof q !== 'string') {
-      return res.status(400).json({ error: 'Query parameter "q" is required' });
+      return res.status(400).json({ error: 'Query parameter "q" (validator address) is required' });
     }
 
-    const wallets = await clickHouseManager.searchWallets(q, Number(limit));
+    const wallets = await clickHouseManager.searchWalletsByValidator(q, timeRange as string, Number(limit));
     res.json(wallets);
   } catch (error) {
-    console.error('Error searching wallets:', error);
+    console.error('Error searching wallets by validator:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

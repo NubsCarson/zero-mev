@@ -237,6 +237,38 @@ export class ClickHouseManager {
     });
   }
 
+  async insertWalletTransactions(transactions: Array<{
+    signature: string;
+    slot: number;
+    blockTime: Date;
+    fee: number;
+    status: string;
+    computeUnitsConsumed: number;
+    programsInvoked: string[];
+    transactionType: string;
+    amount: number | null;
+    walletAddress: string;
+  }>) {
+    if (transactions.length === 0) return;
+
+    await this.client.insert({
+      table: 'wallet_transactions',
+      values: transactions.map(tx => ({
+        signature: tx.signature,
+        wallet_address: tx.walletAddress,
+        slot: tx.slot,
+        block_time: tx.blockTime.toISOString().replace(/\.\d{3}Z$/, ''),
+        fee: tx.fee,
+        status: tx.status,
+        compute_units_consumed: tx.computeUnitsConsumed,
+        programs_invoked: tx.programsInvoked,
+        transaction_type: tx.transactionType,
+        amount: tx.amount,
+      })),
+      format: 'JSONEachRow',
+    });
+  }
+
   async insertWalletProgramUsage(usageData: Array<{
     walletAddress: string;
     programId: string;
@@ -288,25 +320,6 @@ export class ClickHouseManager {
     });
   }
 
-  async searchWallets(query: string, limit: number = 20) {
-    const result = await this.client.query({
-      query: `
-        SELECT DISTINCT wallet_address,
-               count() as transaction_count
-        FROM wallet_transactions 
-        WHERE wallet_address LIKE {query:String}
-        GROUP BY wallet_address
-        ORDER BY transaction_count DESC
-        LIMIT {limit:UInt32}
-      `,
-      query_params: {
-        query: `%${query}%`,
-        limit,
-      },
-    });
-
-    return await result.json();
-  }
 
   async getWalletStats(walletAddress: string, timeRange: string) {
     const timeFilter = this.getTimeRangeFilter(timeRange);
@@ -467,6 +480,200 @@ export class ClickHouseManager {
     }
 
     return { start };
+  }
+
+  async searchWalletsByValidator(validatorQuery: string, timeRange: string, limit: number = 20) {
+    const timeFilter = this.getTimeRangeFilter(timeRange);
+    
+    const result = await this.client.query({
+      query: `
+        SELECT 
+          wt.wallet_address,
+          count(DISTINCT wt.signature) as total_transactions,
+          sum(wt.compute_units_consumed) as total_cu_consumed,
+          sum(wt.fee) as total_fees_paid,
+          count(DISTINCT wt.slot) as blocks_interacted,
+          min(wt.block_time) as first_interaction,
+          max(wt.block_time) as last_interaction
+        FROM wallet_transactions wt
+        JOIN blocks b ON wt.slot = b.slot
+        WHERE b.validator_identity LIKE {validator_query:String}
+          AND wt.block_time >= {start:DateTime64}
+          AND wt.wallet_address NOT IN (SELECT wallet_address FROM wallet_blacklist)
+        GROUP BY wt.wallet_address
+        ORDER BY total_transactions DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: {
+        validator_query: `%${validatorQuery}%`,
+        start: timeFilter.start,
+        limit: limit,
+      },
+    });
+    return await result.json();
+  }
+
+  // Blacklist management methods
+  async getBlacklistedPrograms() {
+    const result = await this.client.query({
+      query: `
+        SELECT program_id, blacklisted_at, reason
+        FROM program_blacklist
+        ORDER BY blacklisted_at DESC
+      `,
+    });
+    return await result.json();
+  }
+
+  async addToBlacklist(programId: string, reason: string = '') {
+    await this.client.insert({
+      table: 'program_blacklist',
+      values: [{
+        program_id: programId,
+        reason: reason,
+      }],
+      format: 'JSONEachRow',
+    });
+  }
+
+  async removeFromBlacklist(programId: string) {
+    await this.client.exec({
+      query: `ALTER TABLE program_blacklist DELETE WHERE program_id = {program_id:String}`,
+      query_params: {
+        program_id: programId,
+      },
+    });
+  }
+
+  async isBlacklisted(programId: string): Promise<boolean> {
+    const result = await this.client.query({
+      query: `
+        SELECT count() as count
+        FROM program_blacklist
+        WHERE program_id = {program_id:String}
+      `,
+      query_params: {
+        program_id: programId,
+      },
+    });
+    const data = await result.json();
+    return data.data && data.data[0] && Number(data.data[0].count) > 0;
+  }
+
+  async clearBlacklist() {
+    await this.client.exec({
+      query: `TRUNCATE TABLE program_blacklist`,
+    });
+  }
+
+  // Wallet blacklist management methods
+  async getBlacklistedWallets() {
+    const result = await this.client.query({
+      query: `
+        SELECT wallet_address, blacklisted_at, reason
+        FROM wallet_blacklist
+        ORDER BY blacklisted_at DESC
+      `,
+    });
+    return await result.json();
+  }
+
+  async addWalletToBlacklist(walletAddress: string, reason: string = '') {
+    await this.client.insert({
+      table: 'wallet_blacklist',
+      values: [{
+        wallet_address: walletAddress,
+        reason: reason,
+      }],
+      format: 'JSONEachRow',
+    });
+  }
+
+  async removeWalletFromBlacklist(walletAddress: string) {
+    await this.client.exec({
+      query: `ALTER TABLE wallet_blacklist DELETE WHERE wallet_address = {wallet_address:String}`,
+      query_params: {
+        wallet_address: walletAddress,
+      },
+    });
+  }
+
+  async isWalletBlacklisted(walletAddress: string): Promise<boolean> {
+    const result = await this.client.query({
+      query: `
+        SELECT count() as count
+        FROM wallet_blacklist
+        WHERE wallet_address = {wallet_address:String}
+      `,
+      query_params: {
+        wallet_address: walletAddress,
+      },
+    });
+    const data = await result.json();
+    return data.data && data.data[0] && Number(data.data[0].count) > 0;
+  }
+
+  async clearWalletBlacklist() {
+    await this.client.exec({
+      query: `TRUNCATE TABLE wallet_blacklist`,
+    });
+  }
+
+  // Modified program usage methods to filter blacklisted programs
+  async getValidatorProgramUsage(validatorIdentity: string, timeRange: { start: Date; end: Date }) {
+    const result = await this.client.query({
+      query: `
+        SELECT 
+          pu.program_id,
+          p.name as program_name,
+          p.category,
+          sum(pu.invocation_count) as total_invocations,
+          sum(pu.cu_consumed) as total_cu_consumed,
+          count(DISTINCT pu.slot) as blocks_used
+        FROM program_usage pu
+        LEFT JOIN programs p ON pu.program_id = p.program_id
+        WHERE pu.validator_identity = {validator_identity:String}
+          AND pu.timestamp >= {start:DateTime64}
+          AND pu.timestamp <= {end:DateTime64}
+          AND pu.program_id NOT IN (SELECT program_id FROM program_blacklist)
+        GROUP BY pu.program_id, p.name, p.category
+        ORDER BY total_invocations DESC
+      `,
+      query_params: {
+        validator_identity: validatorIdentity,
+        start: timeRange.start,
+        end: timeRange.end,
+      },
+    });
+
+    return await result.json();
+  }
+
+  async getWalletProgramUsage(walletAddress: string, timeRange: string) {
+    const timeFilter = this.getTimeRangeFilter(timeRange);
+    
+    const result = await this.client.query({
+      query: `
+        SELECT 
+          arrayJoin(programs_invoked) as program_id,
+          count() as total_invocations,
+          sum(compute_units_consumed) as total_cu_consumed,
+          count(DISTINCT signature) as transaction_count
+        FROM wallet_transactions wt
+        LEFT JOIN program_blacklist pb ON arrayJoin(programs_invoked) = pb.program_id
+        WHERE wt.wallet_address = {wallet_address:String}
+          AND wt.block_time >= {start:DateTime64}
+          AND pb.program_id IS NULL
+        GROUP BY program_id
+        ORDER BY total_invocations DESC
+      `,
+      query_params: {
+        wallet_address: walletAddress,
+        start: timeFilter.start,
+      },
+    });
+
+    return await result.json();
   }
 }
 
