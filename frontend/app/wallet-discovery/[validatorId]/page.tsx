@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { searchWallets, WalletSearchResult } from '@/lib/api';
+import { searchWallets, WalletSearchResult, triggerValidatorIngestion } from '@/lib/api';
 import { Wallet, User, ArrowLeft, Loader2, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 
@@ -33,11 +33,38 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     setError(null);
     
     try {
-      const results = await searchWallets(decodedValidatorId, timeRange, 100);
+      const results = await searchWallets(decodedValidatorId, timeRange);
       setWallets(results);
       
       if (results.length === 0) {
-        setError('No wallets found interacting with this validator in the selected timeframe');
+        // No wallets found, try to trigger historical data ingestion
+        console.log(`No wallets found for validator ${decodedValidatorId}, triggering ingestion...`);
+        
+        try {
+          await triggerValidatorIngestion(decodedValidatorId, timeRange);
+          
+          // Wait a moment for ingestion to start, then retry
+          setTimeout(async () => {
+            try {
+              const retryResults = await searchWallets(decodedValidatorId, timeRange);
+              setWallets(retryResults);
+              
+              if (retryResults.length === 0) {
+                setError('No wallets found interacting with this validator in the selected timeframe. Historical data ingestion has been triggered - please check back in a few minutes.');
+              } else {
+                setError(null);
+              }
+            } catch (retryError) {
+              console.error('Error on retry:', retryError);
+              setError('Historical data ingestion triggered. Please check back in a few minutes for updated results.');
+            }
+          }, 3000); // Wait 3 seconds before retry
+          
+          setError('Fetching historical data from blockchain... This may take a few moments.');
+        } catch (ingestError) {
+          console.error('Failed to trigger ingestion:', ingestError);
+          setError('No wallets found interacting with this validator in the selected timeframe');
+        }
       }
     } catch (error) {
       console.error('Error loading wallets:', error);

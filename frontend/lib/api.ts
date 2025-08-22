@@ -42,7 +42,7 @@ export interface TimeSeriesPoint {
   cu_consumed: number;
 }
 
-export const searchValidators = async (query: string, limit = 20): Promise<ValidatorSearchResult[]> => {
+export const searchValidators = async (query: string, limit = 10000): Promise<ValidatorSearchResult[]> => {
   const response = await api.get('/api/validators/search', {
     params: { q: query, limit },
   });
@@ -132,7 +132,7 @@ export const getValidatorProgramUsageQuick = async (validatorId: string, timeRan
   return response.data;
 };
 
-export const getTopValidators = async (timeRange = '24h', limit = 50): Promise<ValidatorSearchResult[]> => {
+export const getTopValidators = async (timeRange = '24h', limit = 10000): Promise<ValidatorSearchResult[]> => {
   const response = await api.get('/api/validators/top', {
     params: { timeRange, limit },
   });
@@ -204,7 +204,7 @@ export interface WalletSearchResult {
   last_interaction: string;
 }
 
-export const searchWallets = async (validatorQuery: string, timeRange = '24h', limit = 20): Promise<WalletSearchResult[]> => {
+export const searchWallets = async (validatorQuery: string, timeRange = '24h', limit = 50000): Promise<WalletSearchResult[]> => {
   const response = await api.get('/api/wallets/search', {
     params: { q: validatorQuery, timeRange, limit },
   });
@@ -238,7 +238,7 @@ export const getWalletProgramUsage = async (walletAddress: string, timeRange = '
   return response.data;
 };
 
-export const getWalletTransactions = async (walletAddress: string, timeRange = '24h', limit = 100): Promise<WalletTransaction[]> => {
+export const getWalletTransactions = async (walletAddress: string, timeRange = '24h', limit = 10000): Promise<WalletTransaction[]> => {
   const response = await retryRequest(() => 
     api.get(`/api/wallets/${encodeURIComponent(walletAddress)}/transactions`, {
       params: { timeRange, limit },
@@ -250,7 +250,7 @@ export const getWalletTransactions = async (walletAddress: string, timeRange = '
   return response.data;
 };
 
-export const getTopWallets = async (timeRange = '24h', limit = 50): Promise<WalletSearchResult[]> => {
+export const getTopWallets = async (timeRange = '24h', limit = 50000): Promise<WalletSearchResult[]> => {
   const response = await api.get('/api/wallets/top', {
     params: { timeRange, limit },
   });
