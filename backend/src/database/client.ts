@@ -21,6 +21,9 @@ export class ClickHouseManager {
       
       // Create database and tables if they don't exist
       await this.setupSchema();
+      
+      // Ensure all required tables exist
+      await this.ensureTablesExist();
     } catch (error) {
       console.error('❌ Failed to initialize ClickHouse:', error);
       throw error;
@@ -32,19 +35,33 @@ export class ClickHouseManager {
     const path = await import('path');
     
     try {
-      const schemaPath = path.join(process.cwd(), 'src/database/schema.sql');
-      const schema = await fs.readFile(schemaPath, 'utf-8');
+      const schemaFiles = [
+        'src/database/schema.sql',
+        'src/database/wallet-schema.sql'
+      ];
       
-      // Split by semicolon and execute each statement
-      const statements = schema.split(';').filter(stmt => stmt.trim());
-      
-      for (const statement of statements) {
-        if (statement.trim()) {
-          await this.client.exec({ query: statement });
+      for (const schemaFile of schemaFiles) {
+        const schemaPath = path.join(process.cwd(), schemaFile);
+        
+        try {
+          const schema = await fs.readFile(schemaPath, 'utf-8');
+          
+          // Split by semicolon and execute each statement
+          const statements = schema.split(';').filter(stmt => stmt.trim());
+          
+          for (const statement of statements) {
+            if (statement.trim()) {
+              await this.client.exec({ query: statement });
+            }
+          }
+          
+          console.log(`✅ Schema from ${schemaFile} initialized`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to load ${schemaFile}:`, error.message);
         }
       }
       
-      console.log('✅ Database schema initialized');
+      console.log('✅ Database schema setup completed');
     } catch (error) {
       console.error('❌ Failed to setup schema:', error);
       throw error;
@@ -202,6 +219,71 @@ export class ClickHouseManager {
 
   async close() {
     await this.client.close();
+  }
+
+  // Health check method to ensure required tables exist
+  async ensureTablesExist() {
+    const requiredTables = ['blocks', 'program_usage', 'programs', 'wallet_transactions'];
+    
+    for (const tableName of requiredTables) {
+      try {
+        const result = await this.client.query({
+          query: `SELECT name FROM system.tables WHERE database = '${config.clickhouse.database}' AND name = {table_name:String}`,
+          query_params: { table_name: tableName }
+        });
+        
+        const data = await result.json();
+        const exists = data.data && data.data.length > 0;
+        
+        if (!exists) {
+          console.warn(`⚠️ Table ${tableName} does not exist. Run database initialization.`);
+          
+          // If wallet_transactions is missing, try to create it from wallet-schema.sql
+          if (tableName === 'wallet_transactions') {
+            await this.createWalletTransactionsTable();
+          }
+        } else {
+          console.log(`✅ Table ${tableName} exists`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not check table ${tableName}:`, error.message);
+      }
+    }
+  }
+
+  // Create wallet_transactions table if it doesn't exist
+  private async createWalletTransactionsTable() {
+    try {
+      console.log('🔧 Creating wallet_transactions table...');
+      
+      const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS wallet_transactions (
+          signature String,
+          wallet_address String,
+          slot UInt64,
+          block_time DateTime64(3),
+          fee UInt64,
+          status String,
+          compute_units_consumed UInt64,
+          programs_invoked Array(String),
+          transaction_type String,
+          amount Nullable(UInt64),
+          INDEX idx_wallet wallet_address TYPE bloom_filter(0.01) GRANULARITY 1,
+          INDEX idx_slot slot TYPE minmax GRANULARITY 1,
+          INDEX idx_block_time block_time TYPE minmax GRANULARITY 1,
+          INDEX idx_signature signature TYPE bloom_filter(0.01) GRANULARITY 1
+        ) ENGINE = MergeTree()
+        ORDER BY (wallet_address, block_time, signature)
+        PARTITION BY toYYYYMM(block_time)
+        TTL toDateTime(block_time) + INTERVAL 90 DAY
+      `;
+      
+      await this.client.exec({ query: createTableQuery });
+      console.log('✅ wallet_transactions table created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create wallet_transactions table:', error);
+      throw error;
+    }
   }
 
   // Wallet-related methods

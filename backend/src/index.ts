@@ -187,7 +187,15 @@ async function main() {
             
             // Store wallet transaction data
             if (walletTransactions.length > 0) {
-              await clickHouseManager.insertWalletTransactions(walletTransactions);
+              try {
+                await clickHouseManager.insertWalletTransactions(walletTransactions);
+              } catch (walletError) {
+                if (walletError?.type === 'UNKNOWN_TABLE') {
+                  console.warn(`⚠️ wallet_transactions table does not exist, skipping wallet data for block ${blockData.slot}`);
+                } else {
+                  console.error(`❌ Error inserting wallet transactions for block ${blockData.slot}:`, walletError);
+                }
+              }
             }
           }
 

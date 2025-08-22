@@ -2,6 +2,40 @@ import { solanaRpcClient } from '../solana/rpc-client.js';
 import { clickHouseManager } from '../database/client.js';
 import { Connection } from '@solana/web3.js';
 
+async function retry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry certain errors
+      if (error?.code === -32001 && error?.message?.includes('cleaned up')) {
+        throw error;
+      }
+      if (error?.type === 'UNKNOWN_TABLE') {
+        throw error;
+      }
+      
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`⏳ Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
+
 export async function ingestValidatorData(validatorIdentity: string, timeRange: string = '24h') {
   console.log(`📊 Ingesting data for validator ${validatorIdentity} (${timeRange})`);
   
@@ -9,6 +43,18 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
   
   try {
     const currentSlot = await connection.getSlot();
+    
+    // Get first available block to avoid requesting cleaned up blocks
+    let firstAvailableSlot: number;
+    try {
+      const confirmedBlockResult = await connection.getFirstAvailableBlock();
+      firstAvailableSlot = confirmedBlockResult;
+      console.log(`📍 First available block: ${firstAvailableSlot}, current slot: ${currentSlot}`);
+    } catch (error) {
+      console.warn('⚠️ Could not get first available block, using conservative estimate');
+      firstAvailableSlot = currentSlot - 50000; // Conservative fallback
+    }
+    
     let slotsPerHour = 9000; // Approximately 400ms per slot = 9000 slots per hour
     
     // Calculate initial time range in slots
@@ -35,11 +81,16 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
     
     let validatorSlots: number[] = [];
     
-    // Use the exact timeframe requested by the user
+    // Use the exact timeframe requested by the user, but respect available blocks
     const requestedHours = timeRangeSlots / slotsPerHour;
-    const startSlot = currentSlot - timeRangeSlots;
+    const requestedStartSlot = currentSlot - timeRangeSlots;
+    const startSlot = Math.max(requestedStartSlot, firstAvailableSlot);
+    
+    if (startSlot > requestedStartSlot) {
+      console.log(`⚠️ Adjusting start slot from ${requestedStartSlot} to ${startSlot} due to cleaned up blocks`);
+    }
       
-    console.log(`🔍 Searching for validator blocks from slot ${startSlot} to ${currentSlot} (${requestedHours}h window)`);
+    console.log(`🔍 Searching for validator blocks from slot ${startSlot} to ${currentSlot} (${requestedHours}h window, adjusted for available data)`);
       
     // Get multiple epochs of leader schedules to increase chances of finding the validator
     const epochInfo = await connection.getEpochInfo();
@@ -89,11 +140,13 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
       
       await Promise.all(batch.map(async (slot) => {
         try {
-          const block = await connection.getBlock(slot, {
-            maxSupportedTransactionVersion: 0,
-            transactionDetails: 'full',
-            rewards: false
-          });
+          const block = await retry(async () => {
+            return await connection.getBlock(slot, {
+              maxSupportedTransactionVersion: 0,
+              transactionDetails: 'full',
+              rewards: false
+            });
+          }, 2, 500); // 2 retries with 500ms base delay
           
           if (block) {
             // Calculate block time first
@@ -258,23 +311,35 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
             
             if (hasVoteTransactions && programUsageData.length > 0) {
               // Insert block data only if we have program usage
-              
-              await clickHouseManager.insertBlock({
-                slot,
-                hash: block.blockhash,
-                parentHash: block.previousBlockhash,
-                validatorIdentity,
-                timestamp: blockTime,
-                transactionCount: block.transactions.length,
-                totalCuConsumed: totalCU
-              });
-              
-              // Insert program usage data
-              await clickHouseManager.insertProgramUsage(programUsageData);
-              
-              // Insert wallet transactions if we have any
-              if (walletTransactions.length > 0) {
-                await clickHouseManager.insertWalletTransactions(walletTransactions);
+              try {
+                await clickHouseManager.insertBlock({
+                  slot,
+                  hash: block.blockhash,
+                  parentHash: block.previousBlockhash,
+                  validatorIdentity,
+                  timestamp: blockTime,
+                  transactionCount: block.transactions.length,
+                  totalCuConsumed: totalCU
+                });
+                
+                // Insert program usage data
+                await clickHouseManager.insertProgramUsage(programUsageData);
+                
+                // Insert wallet transactions if we have any (handle gracefully if table doesn't exist)
+                if (walletTransactions.length > 0) {
+                  try {
+                    await clickHouseManager.insertWalletTransactions(walletTransactions);
+                  } catch (walletError) {
+                    if (walletError?.type === 'UNKNOWN_TABLE') {
+                      console.warn(`⚠️ wallet_transactions table does not exist, skipping wallet data for slot ${slot}`);
+                    } else {
+                      throw walletError;
+                    }
+                  }
+                }
+              } catch (dbError) {
+                console.error(`❌ Database error for slot ${slot}:`, dbError);
+                throw dbError;
               }
             }
             
@@ -284,7 +349,26 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
             }
           }
         } catch (error) {
-          console.error(`Error processing slot ${slot}:`, error);
+          // Handle specific error types
+          if (error?.code === -32001 && error?.message?.includes('cleaned up')) {
+            console.log(`⚠️ Block ${slot} cleaned up, skipping (node does not maintain this historical data)`);
+            return;
+          }
+          
+          // Handle other RPC errors gracefully
+          if (error?.code && error?.message) {
+            console.warn(`⚠️ RPC Error for slot ${slot} (${error.code}): ${error.message}`);
+            return;
+          }
+          
+          // Handle ClickHouse errors
+          if (error?.type === 'UNKNOWN_TABLE') {
+            console.error(`❌ ClickHouse table error for slot ${slot}: ${error.message}`);
+            console.log('💡 Consider running database initialization to create missing tables');
+            return;
+          }
+          
+          console.error(`❌ Unexpected error processing slot ${slot}:`, error);
         }
       }));
       
