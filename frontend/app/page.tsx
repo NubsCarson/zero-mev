@@ -18,7 +18,6 @@ export default function Home() {
               Search for a Validator
             </h1>
             <p className="text-gray-400 text-base">
-              Analyze validator block production and program usage
             </p>
             <div className="mt-4">
               <a 

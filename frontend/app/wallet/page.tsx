@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import WalletSearchBar from '@/components/WalletSearchBar';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
+import { BlacklistManager } from '@/components/BlacklistManager';
 import Link from 'next/link';
 
 export default function WalletHome() {
@@ -16,10 +17,9 @@ export default function WalletHome() {
             {/* Header */}
             <div className="text-center">
               <h1 className="text-3xl font-semibold text-gray-100 mb-3">
-                Wallet Transaction Tracker
+                Wallet Tracker
               </h1>
               <p className="text-gray-400 text-base">
-                Search for any Solana wallet to analyze its program usage and transaction history
               </p>
             </div>
             
@@ -40,6 +40,11 @@ export default function WalletHome() {
                 ← Back to Validator Search
               </Link>
             </div>
+          </div>
+          
+          {/* Blacklist Manager */}
+          <div className="flex justify-center">
+            <BlacklistManager />
           </div>
         </div>
       </div>

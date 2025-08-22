@@ -13,6 +13,7 @@ import {
 } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
 import { useBlacklist } from '@/contexts/BlacklistContext';
+import { BlacklistManager } from '@/components/BlacklistManager';
 
 interface ComparisonData {
   program_id: string;
@@ -543,6 +544,11 @@ export default function WalletComparePage() {
               </table>
             </div>
           )}
+        </div>
+        
+        {/* Blacklist Manager */}
+        <div className="flex justify-center mt-8">
+          <BlacklistManager />
         </div>
       </div>
     </div>

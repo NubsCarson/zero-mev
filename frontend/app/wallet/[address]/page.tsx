@@ -17,6 +17,7 @@ import {
 } from '@/lib/api';
 import { getProgramColor, getProgramName, isProgramKnown } from '@/lib/programs';
 import { useBlacklist } from '@/contexts/BlacklistContext';
+import { BlacklistManager } from '@/components/BlacklistManager';
 
 export default function WalletPage() {
   const params = useParams();
@@ -485,6 +486,10 @@ export default function WalletPage() {
           )}
         </div>
 
+        {/* Blacklist Manager */}
+        <div className="flex justify-center mt-8">
+          <BlacklistManager />
+        </div>
       </div>
     </div>
   );

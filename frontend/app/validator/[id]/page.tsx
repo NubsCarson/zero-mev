@@ -313,19 +313,28 @@ export default function ValidatorPage() {
       return true;
     })
     .sort((a, b) => {
-    const aValue = getSortValue(a, sortField);
-    const bValue = getSortValue(b, sortField);
-    
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      // Primary sort: Always by block coverage percentage (highest to lowest)
+      const aBlocksPercentage = calculateBlocksPercentage(a);
+      const bBlocksPercentage = calculateBlocksPercentage(b);
+      
+      if (aBlocksPercentage !== bBlocksPercentage) {
+        return bBlocksPercentage - aBlocksPercentage; // Higher percentage first
+      }
+      
+      // Secondary sort: Use the current sort field and direction for programs with same percentage
+      const aValue = getSortValue(a, sortField);
+      const bValue = getSortValue(b, sortField);
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+      
       return sortDirection === 'asc' 
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue);
-    }
-    
-    return sortDirection === 'asc' 
-      ? (aValue as number) - (bValue as number)
-      : (bValue as number) - (aValue as number);
-  });
+        ? (aValue as number) - (bValue as number)
+        : (bValue as number) - (aValue as number);
+    });
 
   const SortableHeader = ({ field, children }: { field: typeof sortField, children: React.ReactNode }) => (
     <th 
@@ -512,7 +521,7 @@ export default function ValidatorPage() {
               <div>
                 <h2 className="text-lg font-semibold text-white">Program Block Coverage</h2>
                 <p className="text-sm text-gray-400">
-                  Sorted by {sortField === 'program' ? 'program name' : 'block coverage'} ({sortDirection === 'desc' ? 'high to low' : 'low to high'}) • Showing {filteredAndSortedPrograms.length} of {programs.length} programs
+                  Sorted by block coverage (high to low), then by {sortField === 'program' ? 'program name' : sortField} ({sortDirection === 'desc' ? 'high to low' : 'low to high'}) • Showing {filteredAndSortedPrograms.length} of {programs.length} programs
                 </p>
               </div>
               <div className="flex items-center space-x-3">
