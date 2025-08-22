@@ -52,8 +52,9 @@ export const WalletBlacklistManager: React.FC<WalletBlacklistManagerProps> = ({ 
       setNewWalletAddress('');
       setNewWalletReason('');
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to add wallet to blacklist');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to add wallet to blacklist');
     } finally {
       setIsSubmitting(false);
     }
@@ -62,8 +63,9 @@ export const WalletBlacklistManager: React.FC<WalletBlacklistManagerProps> = ({ 
   const handleRemoveWallet = async (walletAddress: string) => {
     try {
       await removeFromWalletBlacklist(walletAddress);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to remove wallet from blacklist');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to remove wallet from blacklist');
     }
   };
 
@@ -72,8 +74,9 @@ export const WalletBlacklistManager: React.FC<WalletBlacklistManagerProps> = ({ 
       try {
         await clearWalletBlacklist();
         setError(null);
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to clear wallet blacklist');
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { error?: string } } };
+        setError(error.response?.data?.error || 'Failed to clear wallet blacklist');
       }
     }
   };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import SearchBar from '@/components/SearchBar';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
 import { BlacklistManager } from '@/components/BlacklistManager';
@@ -20,12 +21,12 @@ export default function Home() {
             <p className="text-gray-400 text-base">
             </p>
             <div className="mt-4">
-              <a 
+              <Link 
                 href="/wallet-discovery"
                 className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-md text-sm text-gray-300 transition-colors"
               >
                 Switch to Wallet Discovery →
-              </a>
+              </Link>
             </div>
           </div>
           

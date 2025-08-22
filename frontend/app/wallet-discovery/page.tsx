@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import SearchBar from '@/components/SearchBar';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
 import { WalletBlacklistManager } from '@/components/WalletBlacklistManager';
@@ -27,12 +28,12 @@ export default function WalletDiscoveryPage() {
               Enter a validator address to discover wallets that interacted with blocks from that validator
             </p>
             <div className="mt-4">
-              <a 
+              <Link 
                 href="/"
                 className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-md text-sm text-gray-300 transition-colors"
               >
                 ← Switch to Validator Search
-              </a>
+              </Link>
             </div>
           </div>
           

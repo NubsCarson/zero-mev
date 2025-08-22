@@ -176,11 +176,12 @@ export default function ValidatorPage() {
         console.log(`📊 Historical data loaded, starting API polling...`);
         setHistoricalDataLoaded(true);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string; message?: string };
       console.error('Error fetching data:', err);
       
       // Handle timeout specifically
-      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         console.log(`⏳ Initial data fetch timed out, but ingestion is running. Starting polling...`);
         setError('Data ingestion in progress. This usually takes 1-2 minutes for the initial load.');
         setIsPolling(true);

@@ -53,8 +53,9 @@ export const BlacklistManager: React.FC<BlacklistManagerProps> = ({ className = 
       setNewProgramId('');
       setNewProgramReason('');
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to add program to blacklist');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to add program to blacklist');
     } finally {
       setIsSubmitting(false);
     }
@@ -63,8 +64,9 @@ export const BlacklistManager: React.FC<BlacklistManagerProps> = ({ className = 
   const handleRemoveProgram = async (programId: string) => {
     try {
       await removeFromBlacklist(programId);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to remove program from blacklist');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to remove program from blacklist');
     }
   };
 
@@ -73,8 +75,9 @@ export const BlacklistManager: React.FC<BlacklistManagerProps> = ({ className = 
       try {
         await clearBlacklist();
         setError(null);
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to clear blacklist');
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { error?: string } } };
+        setError(error.response?.data?.error || 'Failed to clear blacklist');
       }
     }
   };

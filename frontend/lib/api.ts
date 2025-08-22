@@ -35,6 +35,21 @@ export interface ValidatorSearchResult {
   blocks_produced: number;
 }
 
+interface ClickHouseValidatorItem {
+  validator_identity: string;
+  blocks_produced: string | number;
+}
+
+interface ClickHouseWalletItem {
+  wallet_address: string;
+  total_transactions: string | number;
+  total_cu_consumed: string | number;
+  total_fees_paid: string | number;
+  blocks_interacted: string | number;
+  first_interaction: string;
+  last_interaction: string;
+}
+
 export interface TimeSeriesPoint {
   timestamp: string;
   blocks_produced: number;
@@ -48,7 +63,7 @@ export const searchValidators = async (query: string, limit = 10000): Promise<Va
   });
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
-    return response.data.data.map((item: any) => ({
+    return response.data.data.map((item: ClickHouseValidatorItem) => ({
       validator_identity: item.validator_identity,
       blocks_produced: Number(item.blocks_produced)
     }));
@@ -62,14 +77,15 @@ const retryRequest = async <T>(fn: () => Promise<T>, maxRetries = 3): Promise<T>
   for (let i = 0; i <= maxRetries; i++) {
     try {
       return await fn();
-    } catch (error: any) {
-      lastError = error;
+    } catch (error: unknown) {
+      lastError = error as Error;
       if (i === maxRetries) break;
       
       // Only retry on 500+ errors or network errors
-      if (error.response?.status >= 500 || error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('socket hang up')) {
+      const err = error as Error & { response?: { status?: number }, code?: string, message: string };
+      if (err.response?.status && err.response.status >= 500 || err.code === 'ECONNABORTED' || err.message.includes('timeout') || err.message.includes('socket hang up')) {
         const delay = Math.min(1000 * Math.pow(2, i), 10000); // Exponential backoff, max 10s
-        console.log(`API request failed (attempt ${i + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, error.message);
+        console.log(`API request failed (attempt ${i + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, err.message);
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
         break; // Don't retry client errors (4xx)
@@ -138,7 +154,7 @@ export const getTopValidators = async (timeRange = '24h', limit = 10000): Promis
   });
   // Handle ClickHouse response format
   if (response.data && response.data.data) {
-    return response.data.data.map((item: any) => ({
+    return response.data.data.map((item: ClickHouseValidatorItem) => ({
       validator_identity: item.validator_identity,
       blocks_produced: Number(item.blocks_produced)
     }));
