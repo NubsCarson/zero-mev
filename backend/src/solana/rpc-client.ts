@@ -25,9 +25,9 @@ export class SolanaRpcClient {
           rewards: false
         });
         
-        if (block && block.blockHeight) {
+        if (block && (block as any).blockHeight) {
           // Check if this block was produced by our validator
-          const leaderSchedule = await this.connection.getLeaderSchedule(slot);
+          const leaderSchedule = await this.connection.getLeaderSchedule();
           let blockValidator = null;
           
           for (const [validator, slots] of Object.entries(leaderSchedule || {})) {

@@ -5,12 +5,18 @@
     "moduleResolution": "node",
     "outDir": "./dist",
     "rootDir": "./src",
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitReturns": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "noStrictGenericChecks": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

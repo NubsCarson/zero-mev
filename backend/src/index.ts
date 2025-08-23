@@ -169,7 +169,6 @@ async function main() {
               timestamp: blockData.timestamp,
               validatorIdentity: blockData.validatorIdentity,
               transactionCount: blockData.transactions.length,
-              totalInstructions: analysis.totalInstructions,
               totalCuConsumed: analysis.totalCuConsumed,
             });
 

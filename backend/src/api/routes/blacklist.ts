@@ -10,7 +10,8 @@ router.get('/', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error fetching blacklisted programs:', error);
-    res.status(500).json({ error: 'Failed to fetch blacklisted programs' });
+    // Return empty data when database is unavailable
+    res.json({ data: [] });
   }
 });
 

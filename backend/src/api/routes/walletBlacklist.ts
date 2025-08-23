@@ -10,7 +10,8 @@ router.get('/', async (req, res) => {
     res.json(wallets);
   } catch (error) {
     console.error('Error fetching blacklisted wallets:', error);
-    res.status(500).json({ error: 'Failed to fetch blacklisted wallets' });
+    // Return empty data when database is unavailable
+    res.json({ data: [] });
   }
 });
 

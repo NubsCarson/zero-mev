@@ -110,17 +110,17 @@ function analyzeTransaction(transaction: ParsedTransactionWithMeta, walletAddres
   // Get program IDs from instructions - handle both legacy and versioned transactions
   if ('compiledInstructions' in message) {
     // Versioned transaction format
-    for (const inst of message.compiledInstructions) {
-      if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
-        const programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
+    for (const inst of (message as any).compiledInstructions) {
+      if ((message as any).staticAccountKeys && (message as any).staticAccountKeys[inst.programIdIndex]) {
+        const programId = (message as any).staticAccountKeys[inst.programIdIndex].toBase58();
         programs.add(programId);
       }
     }
   } else if ('instructions' in message) {
     // Legacy transaction format
-    for (const inst of message.instructions) {
-      if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
-        const programId = message.accountKeys[inst.programIdIndex].toBase58();
+    for (const inst of (message as any).instructions) {
+      if ((message as any).accountKeys && (message as any).accountKeys[inst.programIdIndex]) {
+        const programId = (message as any).accountKeys[inst.programIdIndex].toBase58();
         programs.add(programId);
       }
     }
@@ -142,10 +142,10 @@ function analyzeTransaction(transaction: ParsedTransactionWithMeta, walletAddres
         if ('programIdIndex' in inst) {
           let programId = null;
           // Try both account key formats
-          if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
-            programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
-          } else if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
-            programId = message.accountKeys[inst.programIdIndex].toBase58();
+          if ((message as any).staticAccountKeys && (message as any).staticAccountKeys[(inst as any).programIdIndex]) {
+            programId = (message as any).staticAccountKeys[(inst as any).programIdIndex].toBase58();
+          } else if ((message as any).accountKeys && (message as any).accountKeys[(inst as any).programIdIndex]) {
+            programId = (message as any).accountKeys[(inst as any).programIdIndex].toBase58();
           }
           if (programId) {
             programs.add(programId);

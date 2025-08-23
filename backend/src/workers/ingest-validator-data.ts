@@ -98,7 +98,7 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
     
     for (const epoch of epochs) {
       try {
-        const leaderSchedule = await connection.getLeaderSchedule(null, { epoch });
+        const leaderSchedule = await (connection.getLeaderSchedule as any)(undefined, { epoch });
         if (leaderSchedule && leaderSchedule[validatorIdentity]) {
           const epochSlots = leaderSchedule[validatorIdentity]
             .map(offset => {
@@ -179,17 +179,17 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                 // Get program IDs from instructions - handle both legacy and versioned transactions
                 if ('compiledInstructions' in message) {
                   // Versioned transaction format
-                  for (const inst of message.compiledInstructions) {
-                    if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
-                      const programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
+                  for (const inst of (message as any).compiledInstructions) {
+                    if ((message as any).staticAccountKeys && (message as any).staticAccountKeys[inst.programIdIndex]) {
+                      const programId = (message as any).staticAccountKeys[inst.programIdIndex].toBase58();
                       programIds.add(programId);
                     }
                   }
                 } else if ('instructions' in message) {
                   // Legacy transaction format
-                  for (const inst of message.instructions) {
-                    if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
-                      const programId = message.accountKeys[inst.programIdIndex].toBase58();
+                  for (const inst of (message as any).instructions) {
+                    if ((message as any).accountKeys && (message as any).accountKeys[inst.programIdIndex]) {
+                      const programId = (message as any).accountKeys[inst.programIdIndex].toBase58();
                       programIds.add(programId);
                     }
                   }
@@ -202,10 +202,10 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                       if ('programIdIndex' in inst) {
                         let programId = null;
                         // Try both account key formats
-                        if (message.staticAccountKeys && message.staticAccountKeys[inst.programIdIndex]) {
-                          programId = message.staticAccountKeys[inst.programIdIndex].toBase58();
-                        } else if (message.accountKeys && message.accountKeys[inst.programIdIndex]) {
-                          programId = message.accountKeys[inst.programIdIndex].toBase58();
+                        if ((message as any).staticAccountKeys && (message as any).staticAccountKeys[inst.programIdIndex]) {
+                          programId = (message as any).staticAccountKeys[inst.programIdIndex].toBase58();
+                        } else if ((message as any).accountKeys && (message as any).accountKeys[inst.programIdIndex]) {
+                          programId = (message as any).accountKeys[inst.programIdIndex].toBase58();
                         }
                         if (programId) {
                           programIds.add(programId);
@@ -237,10 +237,10 @@ export async function ingestValidatorData(validatorIdentity: string, timeRange: 
                   
                   if ('staticAccountKeys' in message) {
                     // Versioned transaction
-                    accountKeys = message.staticAccountKeys.map(key => key.toBase58());
+                    accountKeys = (message as any).staticAccountKeys.map((key: any) => key.toBase58());
                   } else if ('accountKeys' in message) {
                     // Legacy transaction
-                    accountKeys = message.accountKeys.map(key => key.toBase58());
+                    accountKeys = (message as any).accountKeys.map((key: any) => key.toBase58());
                   }
                   
                   // The first account is usually the fee payer (primary wallet)
@@ -403,7 +403,7 @@ export async function startContinuousIngestion(validatorIdentity: string) {
         for (let slot = lastProcessedSlot + 1; slot <= currentSlot; slot++) {
           try {
             // Check if this slot belongs to our validator
-            const leaderSchedule = await connection.getLeaderSchedule(slot);
+            const leaderSchedule = await connection.getLeaderSchedule();
             let isValidatorSlot = false;
             
             if (leaderSchedule) {

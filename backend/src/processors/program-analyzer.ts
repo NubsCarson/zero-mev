@@ -80,7 +80,7 @@ export class ProgramAnalyzer {
       const hasError = tx.meta && tx.meta.err;
       if (!hasError) {
         // Handle both legacy and versioned transaction formats
-        const message = tx.transaction.message;
+        const message = tx.transaction.message as any;
         const instructions = message.instructions || message.compiledInstructions || [];
         const accountKeys = message.accountKeys || message.staticAccountKeys || [];
         
@@ -188,7 +188,7 @@ export class ProgramAnalyzer {
     }
     
     const uniquePrograms = new Set<string>();
-    const message = tx.transaction.message;
+    const message = tx.transaction.message as any;
     const instructions = message.instructions || message.compiledInstructions || [];
     const accountKeys = message.accountKeys || message.staticAccountKeys || [];
 

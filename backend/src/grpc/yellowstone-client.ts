@@ -1,14 +1,11 @@
-import Client, {
-  CommitmentLevel,
-  SubscribeRequest,
-  SubscribeUpdate,
-  SubscribeRequestFilterBlocks,
-} from '@triton-one/yellowstone-grpc';
+// Using dynamic import for ESM compatibility
+let Client: any;
+const CommitmentLevel = { CONFIRMED: 'confirmed' as any };
 import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../config/index.js';
 
 export class YellowstoneClient {
-  private client: Client | null = null;
+  private client: any = null;
   private connection: Connection;
   private useRealGrpc: boolean = false;
 
@@ -16,10 +13,9 @@ export class YellowstoneClient {
     // Initialize Solana connection for additional data
     this.connection = new Connection('https://api.mainnet-beta.solana.com');
     
-    // Check if we have valid gRPC credentials
+    // Check if we have valid gRPC URL
     this.useRealGrpc = !!(config.yellowstone.grpcUrl && 
-                         config.yellowstone.grpcUrl !== 'https://your-yellowstone-endpoint.com' &&
-                         config.yellowstone.apiToken);
+                         config.yellowstone.grpcUrl !== 'https://your-yellowstone-endpoint.com');
   }
 
   async initialize() {
@@ -28,9 +24,15 @@ export class YellowstoneClient {
       
       if (this.useRealGrpc) {
         console.log('🔗 Using real Yellowstone gRPC client');
+        console.log('📡 Connecting to:', config.yellowstone.grpcUrl);
+        
+        // Dynamically import the Client
+        const grpcModule = await import('@triton-one/yellowstone-grpc');
+        Client = (grpcModule.default as any).default || grpcModule.default;
+        
         this.client = new Client(
           config.yellowstone.grpcUrl,
-          config.yellowstone.apiToken,
+          undefined, // No API token needed
           {
             "grpc.max_receive_message_length": 64 * 1024 * 1024
           }
@@ -63,7 +65,7 @@ export class YellowstoneClient {
     }
 
     try {
-      const request: SubscribeRequest = {
+      const request: any = {
         accounts: {},
         slots: {},
         transactions: {},
@@ -73,7 +75,7 @@ export class YellowstoneClient {
             includeTransactions: true,
             includeAccounts: false,
             includeEntries: false,
-          } as SubscribeRequestFilterBlocks,
+          },
         },
         blocksMeta: {},
         entry: {},
@@ -94,7 +96,7 @@ export class YellowstoneClient {
       });
 
       // Handle updates
-      stream.on('data', (data: SubscribeUpdate) => {
+      stream.on('data', (data: any) => {
         try {
           if (data.block) {
             const block = data.block;

@@ -144,33 +144,6 @@ export class ClickHouseManager {
     return await result.json();
   }
 
-  async getValidatorProgramUsage(validatorIdentity: string, timeRange: { start: Date; end: Date }) {
-    const result = await this.client.query({
-      query: `
-        SELECT 
-          pu.program_id,
-          p.name as program_name,
-          p.category,
-          sum(pu.invocation_count) as total_invocations,
-          sum(pu.cu_consumed) as total_cu_consumed,
-          count(DISTINCT pu.slot) as blocks_used
-        FROM program_usage pu
-        LEFT JOIN programs p ON pu.program_id = p.program_id
-        WHERE pu.validator_identity = {validator_identity:String}
-          AND pu.timestamp >= {start:DateTime64}
-          AND pu.timestamp <= {end:DateTime64}
-        GROUP BY pu.program_id, p.name, p.category
-        ORDER BY total_invocations DESC
-      `,
-      query_params: {
-        validator_identity: validatorIdentity,
-        start: timeRange.start,
-        end: timeRange.end,
-      },
-    });
-
-    return await result.json();
-  }
 
   async getTopValidators(timeRange: { start: Date; end: Date }, limit: number = 50) {
     const result = await this.client.query({
@@ -232,7 +205,7 @@ export class ClickHouseManager {
           query_params: { table_name: tableName }
         });
         
-        const data = await result.json();
+        const data = await result.json() as any;
         const exists = data.data && data.data.length > 0;
         
         if (!exists) {
@@ -430,30 +403,6 @@ export class ClickHouseManager {
     return await result.json();
   }
 
-  async getWalletProgramUsage(walletAddress: string, timeRange: string) {
-    const timeFilter = this.getTimeRangeFilter(timeRange);
-    
-    const result = await this.client.query({
-      query: `
-        SELECT 
-          arrayJoin(programs_invoked) as program_id,
-          count() as total_invocations,
-          sum(compute_units_consumed) as total_cu_consumed,
-          count(DISTINCT signature) as transaction_count
-        FROM wallet_transactions
-        WHERE wallet_address = {wallet_address:String}
-          AND block_time >= {start:DateTime64}
-        GROUP BY program_id
-        ORDER BY total_invocations DESC
-      `,
-      query_params: {
-        wallet_address: walletAddress,
-        start: timeFilter.start,
-      },
-    });
-
-    return await result.json();
-  }
 
   async getWalletTransactions(walletAddress: string, timeRange: string, limit: number = 100) {
     const timeFilter = this.getTimeRangeFilter(timeRange);
@@ -533,7 +482,7 @@ export class ClickHouseManager {
       },
     });
 
-    const data = await result.json();
+    const data = await result.json() as any;
     return data.data && data.data[0] ? data.data[0] : null;
   }
 
@@ -638,7 +587,7 @@ export class ClickHouseManager {
         program_id: programId,
       },
     });
-    const data = await result.json();
+    const data = await result.json() as any;
     return data.data && data.data[0] && Number(data.data[0].count) > 0;
   }
 
@@ -691,7 +640,7 @@ export class ClickHouseManager {
         wallet_address: walletAddress,
       },
     });
-    const data = await result.json();
+    const data = await result.json() as any;
     return data.data && data.data[0] && Number(data.data[0].count) > 0;
   }
 
