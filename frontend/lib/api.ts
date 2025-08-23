@@ -220,9 +220,14 @@ export interface WalletSearchResult {
   last_interaction: string;
 }
 
-export const searchWallets = async (validatorQuery: string, timeRange = '24h', limit = 50000): Promise<WalletSearchResult[]> => {
+export const searchWallets = async (validatorQuery: string, timeRange = '24h', limit = 50000, defiPrograms?: string[]): Promise<WalletSearchResult[]> => {
   const response = await api.get('/api/wallets/search', {
-    params: { q: validatorQuery, timeRange, limit },
+    params: { 
+      q: validatorQuery, 
+      timeRange, 
+      limit,
+      defiPrograms: defiPrograms ? defiPrograms.join(',') : undefined
+    },
   });
   if (response.data && response.data.data) {
     return response.data.data;

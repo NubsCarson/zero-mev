@@ -564,8 +564,13 @@ export class ClickHouseManager {
     return { start };
   }
 
-  async searchWalletsByValidator(validatorQuery: string, timeRange: string, limit: number = 20) {
+  async searchWalletsByValidator(validatorQuery: string, timeRange: string, limit: number = 20, defiPrograms?: string[]) {
     const timeFilter = this.getTimeRangeFilter(timeRange);
+    
+    // Build the DeFi filter if programs are provided
+    const defiFilter = defiPrograms && defiPrograms.length > 0
+      ? `AND arrayExists(x -> x IN (${defiPrograms.map(p => `'${p}'`).join(',')}), wt.programs_invoked)`
+      : '';
     
     const result = await this.client.query({
       query: `
@@ -582,6 +587,7 @@ export class ClickHouseManager {
         WHERE b.validator_identity LIKE {validator_query:String}
           AND wt.block_time >= {start:DateTime64}
           AND wt.wallet_address NOT IN (SELECT wallet_address FROM wallet_blacklist)
+          ${defiFilter}
         GROUP BY wt.wallet_address
         ORDER BY total_transactions DESC
         LIMIT {limit:UInt32}

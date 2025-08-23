@@ -36,13 +36,23 @@ export async function handleIngestWallet(req: Request, res: Response) {
 
 export async function searchWallets(req: Request, res: Response) {
   try {
-    const { q, timeRange = '24h', limit = 20 } = req.query;
+    const { q, timeRange = '24h', limit = 20, defiPrograms } = req.query;
     
     if (!q || typeof q !== 'string') {
       return res.status(400).json({ error: 'Query parameter "q" (validator address) is required' });
     }
 
-    const wallets = await clickHouseManager.searchWalletsByValidator(q, timeRange as string, Number(limit));
+    // Parse DeFi programs if provided
+    const defiProgramsList = defiPrograms && typeof defiPrograms === 'string' 
+      ? defiPrograms.split(',').filter(p => p.trim())
+      : undefined;
+
+    const wallets = await clickHouseManager.searchWalletsByValidator(
+      q, 
+      timeRange as string, 
+      Number(limit),
+      defiProgramsList
+    );
     res.json(wallets);
   } catch (error) {
     console.error('Error searching wallets by validator:', error);

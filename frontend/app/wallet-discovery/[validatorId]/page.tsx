@@ -3,7 +3,7 @@
 import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { searchWallets, WalletSearchResult, triggerValidatorIngestion, getValidatorStats, ValidatorStats } from '@/lib/api';
-import { Wallet, User, ArrowLeft, Loader2 } from 'lucide-react';
+import { Wallet, User, ArrowLeft, Loader2, Filter } from 'lucide-react';
 import Link from 'next/link';
 
 interface WalletDiscoveryPageProps {
@@ -23,7 +23,19 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
   const [totalBlocks, setTotalBlocks] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [validatorStats, setValidatorStats] = useState<ValidatorStats | null>(null);
+  const [defiOnly, setDefiOnly] = useState(false);
   const walletsPerPage = 50;
+
+  // DeFi program IDs
+  const DEFI_PROGRAM_IDS = [
+    'dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN',
+    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+    'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',
+    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+    'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C',
+    'LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj',
+    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
+  ];
 
   const resolvedParams = use(params);
   const decodedValidatorId = decodeURIComponent(resolvedParams.validatorId);
@@ -32,7 +44,7 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     setCurrentPage(1); // Reset to first page when loading new data
     loadWallets();
     loadValidatorStats();
-  }, [decodedValidatorId, timeRange]);
+  }, [decodedValidatorId, timeRange, defiOnly]);
 
   const loadValidatorStats = async () => {
     try {
@@ -50,7 +62,7 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     setError(null);
     
     try {
-      const results = await searchWallets(decodedValidatorId, timeRange);
+      const results = await searchWallets(decodedValidatorId, timeRange, 50000, defiOnly ? DEFI_PROGRAM_IDS : undefined);
       // Sort by slots (blocks_interacted) instead of transaction count
       const sortedResults = results.sort((a, b) => Number(b.blocks_interacted) - Number(a.blocks_interacted));
       setWallets(sortedResults);
@@ -72,7 +84,7 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
           // Wait a moment for ingestion to start, then retry
           setTimeout(async () => {
             try {
-              const retryResults = await searchWallets(decodedValidatorId, timeRange);
+              const retryResults = await searchWallets(decodedValidatorId, timeRange, 50000, defiOnly ? DEFI_PROGRAM_IDS : undefined);
               // Sort by slots (blocks_interacted) instead of transaction count
               const sortedRetryResults = retryResults.sort((a, b) => Number(b.blocks_interacted) - Number(a.blocks_interacted));
               setWallets(sortedRetryResults);
@@ -186,6 +198,23 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
         {error && !loading && (
           <div className="text-red-400 text-center py-12 bg-red-950/20 border border-red-800/30 rounded-lg">
             {error}
+          </div>
+        )}
+
+        {/* DeFi Filter Toggle */}
+        {!loading && (
+          <div className="mb-4 flex items-center justify-end">
+            <button
+              onClick={() => setDefiOnly(!defiOnly)}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                defiOnly 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              <span>DeFi Only</span>
+            </button>
           </div>
         )}
 
