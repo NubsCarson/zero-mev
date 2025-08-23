@@ -3,7 +3,7 @@
 import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { searchWallets, WalletSearchResult, triggerValidatorIngestion, getValidatorStats, ValidatorStats } from '@/lib/api';
-import { Wallet, User, ArrowLeft, Loader2, Copy, Check } from 'lucide-react';
+import { Wallet, User, ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface WalletDiscoveryPageProps {
@@ -19,7 +19,6 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h');
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [totalTxns, setTotalTxns] = useState(0);
   const [totalBlocks, setTotalBlocks] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,7 +51,9 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     
     try {
       const results = await searchWallets(decodedValidatorId, timeRange);
-      setWallets(results);
+      // Sort by slots (blocks_interacted) instead of transaction count
+      const sortedResults = results.sort((a, b) => Number(b.blocks_interacted) - Number(a.blocks_interacted));
+      setWallets(sortedResults);
       
       // Calculate totals for percentages (sum of wallet activity) - fix string issue
       const txnTotal = results.reduce((sum, w) => sum + Number(w.total_transactions), 0);
@@ -72,7 +73,9 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
           setTimeout(async () => {
             try {
               const retryResults = await searchWallets(decodedValidatorId, timeRange);
-              setWallets(retryResults);
+              // Sort by slots (blocks_interacted) instead of transaction count
+              const sortedRetryResults = retryResults.sort((a, b) => Number(b.blocks_interacted) - Number(a.blocks_interacted));
+              setWallets(sortedRetryResults);
               
               // Calculate totals for percentages for retry results - fix string issue
               const retryTxnTotal = retryResults.reduce((sum, w) => sum + Number(w.total_transactions), 0);
@@ -109,19 +112,7 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     return num.toLocaleString();
   };
 
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 8)}...${address.slice(-8)}`;
-  };
 
-  const handleCopyAddress = (walletAddress: string) => {
-    // Use synchronous copy for better performance
-    navigator.clipboard.writeText(walletAddress).then(() => {
-      setCopiedAddress(walletAddress);
-      setTimeout(() => setCopiedAddress(null), 2000);
-    }).catch((error) => {
-      console.error('Failed to copy address:', error);
-    });
-  };
 
   const handleTimeRangeChange = (newTimeRange: string) => {
     setTimeRange(newTimeRange);
@@ -154,23 +145,7 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
           </h1>
           <div className="flex items-center space-x-2 text-gray-400 mb-4">
             <User className="h-4 w-4" />
-            <div className="flex items-center space-x-2">
-              <span className="font-mono text-sm">{formatAddress(decodedValidatorId)}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyAddress(decodedValidatorId);
-                }}
-                className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
-                title="Copy validator address"
-              >
-                {copiedAddress === decodedValidatorId ? (
-                  <Check className="h-3 w-3 text-green-400" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </button>
-            </div>
+            <span className="font-mono text-sm">{decodedValidatorId}</span>
             <span className="text-xs">({timeRange})</span>
           </div>
           
@@ -255,24 +230,8 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
                       <Wallet className="h-5 w-5 text-gray-500" />
-                      <div className="flex items-center space-x-2">
-                        <div className="font-mono text-sm text-gray-200">
-                          {formatAddress(wallet.wallet_address)}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyAddress(wallet.wallet_address);
-                          }}
-                          className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
-                          title="Copy wallet address"
-                        >
-                          {copiedAddress === wallet.wallet_address ? (
-                            <Check className="h-4 w-4 text-green-400" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </button>
+                      <div className="font-mono text-sm text-gray-200">
+                        {wallet.wallet_address}
                       </div>
                     </div>
                     
