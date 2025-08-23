@@ -5,6 +5,12 @@ export class ClickHouseManager {
   private client: ClickHouseClient;
 
   constructor() {
+    console.log('🔧 ClickHouse Config:', {
+      host: config.clickhouse.url,
+      database: config.clickhouse.database,
+      username: config.clickhouse.username,
+      password: config.clickhouse.password ? '***' : '(empty)',
+    });
     this.client = createClient({
       host: config.clickhouse.url,
       database: config.clickhouse.database,
