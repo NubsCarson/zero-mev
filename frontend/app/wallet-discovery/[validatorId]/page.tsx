@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { searchWallets, WalletSearchResult, triggerValidatorIngestion } from '@/lib/api';
+import { searchWallets, WalletSearchResult, triggerValidatorIngestion, getValidatorStats, ValidatorStats } from '@/lib/api';
 import { Wallet, User, ArrowLeft, Loader2, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 
@@ -20,13 +20,31 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h');
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [totalTxns, setTotalTxns] = useState(0);
+  const [totalBlocks, setTotalBlocks] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [validatorStats, setValidatorStats] = useState<ValidatorStats | null>(null);
+  const walletsPerPage = 50;
 
   const resolvedParams = use(params);
   const decodedValidatorId = decodeURIComponent(resolvedParams.validatorId);
 
   useEffect(() => {
+    setCurrentPage(1); // Reset to first page when loading new data
     loadWallets();
+    loadValidatorStats();
   }, [decodedValidatorId, timeRange]);
+
+  const loadValidatorStats = async () => {
+    try {
+      const stats = await getValidatorStats(decodedValidatorId, timeRange);
+      if (stats && stats.length > 0) {
+        setValidatorStats(stats[0]);
+      }
+    } catch (error) {
+      console.error('Error loading validator stats:', error);
+    }
+  };
 
   const loadWallets = async () => {
     setLoading(true);
@@ -35,6 +53,13 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     try {
       const results = await searchWallets(decodedValidatorId, timeRange);
       setWallets(results);
+      
+      // Calculate totals for percentages (sum of wallet activity) - fix string issue
+      const txnTotal = results.reduce((sum, w) => sum + Number(w.total_transactions), 0);
+      const blockTotal = results.reduce((sum, w) => sum + Number(w.blocks_interacted), 0);
+      console.log(`Wallet totals - Txns: ${txnTotal}, Slots: ${blockTotal}, Wallets: ${results.length}`);
+      setTotalTxns(txnTotal);
+      setTotalBlocks(blockTotal);
       
       if (results.length === 0) {
         // No wallets found, try to trigger historical data ingestion
@@ -48,6 +73,12 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
             try {
               const retryResults = await searchWallets(decodedValidatorId, timeRange);
               setWallets(retryResults);
+              
+              // Calculate totals for percentages for retry results - fix string issue
+              const retryTxnTotal = retryResults.reduce((sum, w) => sum + Number(w.total_transactions), 0);
+              const retryBlockTotal = retryResults.reduce((sum, w) => sum + Number(w.blocks_interacted), 0);
+              setTotalTxns(retryTxnTotal);
+              setTotalBlocks(retryBlockTotal);
               
               if (retryResults.length === 0) {
                 setError('No wallets found interacting with this validator in the selected timeframe. Historical data ingestion has been triggered - please check back in a few minutes.');
@@ -82,14 +113,14 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
     return `${address.slice(0, 8)}...${address.slice(-8)}`;
   };
 
-  const handleCopyAddress = async (walletAddress: string) => {
-    try {
-      await navigator.clipboard.writeText(walletAddress);
+  const handleCopyAddress = (walletAddress: string) => {
+    // Use synchronous copy for better performance
+    navigator.clipboard.writeText(walletAddress).then(() => {
       setCopiedAddress(walletAddress);
       setTimeout(() => setCopiedAddress(null), 2000);
-    } catch (error) {
+    }).catch((error) => {
       console.error('Failed to copy address:', error);
-    }
+    });
   };
 
   const handleTimeRangeChange = (newTimeRange: string) => {
@@ -121,11 +152,51 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
           <h1 className="text-2xl font-semibold text-gray-100 mb-2">
             Wallets Interacting with Validator
           </h1>
-          <div className="flex items-center space-x-2 text-gray-400">
+          <div className="flex items-center space-x-2 text-gray-400 mb-4">
             <User className="h-4 w-4" />
-            <span className="font-mono text-sm">{formatAddress(decodedValidatorId)}</span>
+            <div className="flex items-center space-x-2">
+              <span className="font-mono text-sm">{formatAddress(decodedValidatorId)}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyAddress(decodedValidatorId);
+                }}
+                className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
+                title="Copy validator address"
+              >
+                {copiedAddress === decodedValidatorId ? (
+                  <Check className="h-3 w-3 text-green-400" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            </div>
             <span className="text-xs">({timeRange})</span>
           </div>
+          
+          {/* Validator Stats */}
+          {validatorStats && (
+            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-900 border border-gray-800 rounded-lg">
+              <div className="text-center">
+                <div className="text-xl font-bold text-blue-400">
+                  {formatNumber(validatorStats.total_transactions)}
+                </div>
+                <div className="text-xs text-gray-500">Total Transactions</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-400">
+                  {formatNumber(wallets.length)}
+                </div>
+                <div className="text-xs text-gray-500">Unique Wallets</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-yellow-400">
+                  {formatNumber(validatorStats.blocks_produced)}
+                </div>
+                <div className="text-xs text-gray-500">Slots Produced</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Loading */}
@@ -146,17 +217,42 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
         {/* Results */}
         {wallets.length > 0 && !loading && (
           <>
-            <div className="mb-4 text-sm text-gray-400">
-              Found {formatNumber(wallets.length)} wallets
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                Found {formatNumber(wallets.length)} wallets
+              </div>
+              {wallets.length > walletsPerPage && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm bg-gray-800 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-400">
+                    Page {currentPage} of {Math.ceil(wallets.length / walletsPerPage)}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(Math.ceil(wallets.length / walletsPerPage), currentPage + 1))}
+                    disabled={currentPage === Math.ceil(wallets.length / walletsPerPage)}
+                    className="px-3 py-1 text-sm bg-gray-800 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
             
             <div className="space-y-3">
-              {wallets.map((wallet) => (
+              {wallets
+                .slice((currentPage - 1) * walletsPerPage, currentPage * walletsPerPage)
+                .map((wallet) => (
                 <div
                   key={wallet.wallet_address}
-                  className="w-full p-4 bg-gray-900 border border-gray-800 rounded-lg"
+                  className="w-full p-5 bg-gray-900 border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
                       <Wallet className="h-5 w-5 text-gray-500" />
                       <div className="flex items-center space-x-2">
@@ -164,7 +260,10 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
                           {formatAddress(wallet.wallet_address)}
                         </div>
                         <button
-                          onClick={() => handleCopyAddress(wallet.wallet_address)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyAddress(wallet.wallet_address);
+                          }}
                           className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
                           title="Copy wallet address"
                         >
@@ -177,18 +276,52 @@ export default function WalletDiscoveryPage({ params }: WalletDiscoveryPageProps
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-6 text-right">
-                      <div>
-                        <div className="text-sm font-medium text-gray-300">
-                          {formatNumber(wallet.total_transactions)}
+                    <div className="grid grid-cols-2 gap-8">
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium text-gray-300">
+                            {formatNumber(wallet.total_transactions)}
+                          </div>
+                          {validatorStats && validatorStats.total_transactions > 0 && (
+                            <div className="text-sm font-bold text-blue-400">
+                              {((Number(wallet.total_transactions) / validatorStats.total_transactions) * 100).toFixed(2)}%
+                            </div>
+                          )}
                         </div>
+                        {validatorStats && validatorStats.total_transactions > 0 && (
+                          <div className="w-full bg-gray-800 rounded-full h-2 mb-1">
+                            <div 
+                              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                              style={{ 
+                                width: `${Math.min(100, (Number(wallet.total_transactions) / validatorStats.total_transactions) * 100)}%` 
+                              }}
+                            ></div>
+                          </div>
+                        )}
                         <div className="text-xs text-gray-500">Transactions</div>
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-300">
-                          {formatNumber(wallet.blocks_interacted)}
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium text-gray-300">
+                            {formatNumber(wallet.blocks_interacted)}
+                          </div>
+                          {validatorStats && validatorStats.blocks_produced > 0 && (
+                            <div className="text-sm font-bold text-green-400">
+                              {((Number(wallet.blocks_interacted) / validatorStats.blocks_produced) * 100).toFixed(1)}%
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500">Blocks</div>
+                        {validatorStats && validatorStats.blocks_produced > 0 && (
+                          <div className="w-full bg-gray-800 rounded-full h-2 mb-1">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                              style={{ 
+                                width: `${Math.min(100, (Number(wallet.blocks_interacted) / validatorStats.blocks_produced) * 100)}%` 
+                              }}
+                            ></div>
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-500">Slots</div>
                       </div>
                     </div>
                   </div>
