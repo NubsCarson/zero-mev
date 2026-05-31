@@ -1,46 +1,53 @@
-# Solana Program Tracker
+# Zero MEV
 
-Tracks Solana program invocation frequency per validator with a web dashboard and block explorer.
+Solana program activity tracker with validator-level invocation analytics and a
+web dashboard.
 
-## What it does
+## What It Does
 
-- Ingests Solana blocks and tracks which programs are called
-- Shows top programs by usage with color-coded DeFi protocol categories  
-- Live block explorer with validator and program activity
-- Program blacklist management
-- Time-series charts and analytics
+- Ingests Solana blocks and tracks which programs are invoked.
+- Shows top programs by usage with DeFi protocol categories.
+- Provides live block and validator activity views.
+- Supports a program blacklist and time-series analytics.
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
 pnpm install
-
-# 2. Start ClickHouse database
-docker-compose -f docker/docker-compose.yml up -d
-
-# 3. Run database migrations
-CLICKHOUSE_PASS=password1984 pnpm run migrate
-
-# 4. Start everything
-CLICKHOUSE_PASS=password1984 pnpm run dev
+pnpm run dev:db
+cp .env.example .env
+pnpm run migrate
+pnpm run dev
 ```
 
-Open http://localhost:3000
+Open `http://localhost:3000`.
 
-## Environment Variables
+## Environment
 
 Set these in `.env`:
+
 ```bash
-SOL_RPC=https://rpc.zeroblock.io  # Solana RPC endpoint
-CLICKHOUSE_PASS=password1984      # ClickHouse password
+SOL_RPC=https://api.mainnet-beta.solana.com
+CLICKHOUSE_URL=http://localhost:8123
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASS=changeme
+CLICKHOUSE_DB=solana
 ```
+
+Use a real secret for shared or internet-exposed ClickHouse instances. The
+checked-in Docker Compose password is a local development placeholder only.
 
 ## Commands
 
 ```bash
-pnpm run dev        # Start web app + worker
-pnpm run dev:web    # Start web app only  
+pnpm run dev        # Start web app and worker
+pnpm run dev:db     # Start local ClickHouse
+pnpm run dev:web    # Start web app only
 pnpm run dev:worker # Start ingestion worker only
 pnpm run migrate    # Create database tables
-```# zero-mev
+pnpm run build      # Build all packages
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
